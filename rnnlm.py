@@ -78,6 +78,10 @@ train_data = load_data('./ptb/train.txt')
 train_data = data2sentences(train_data)
 train_data = sequence.pad_sequences(train_data, padding='post')
 
+valid_data = load_data('./ptb/valid.txt')
+valid_data = data2sentences(valid_data)
+valid_data = sequence.pad_sequences(valid_data, padding='post')
+
 vocab_size = len(w2i)
 sentence_length = 20
 embedding_size = 128
@@ -88,12 +92,20 @@ max_epoch = 100
 x_train = train_data[:, :sentence_length].astype(np.int32)
 y_train = train_data[:, 1:sentence_length+1].astype(np.int32)
 
-num_batch = len(x_train)//batch_size
+x_valid = valid_data[:, :sentence_length].astype(np.int32)
+y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)
 
-def load_func(index):
+num_train_batch = len(x_train)//batch_size
+num_valid_batch = len(x_valid)//batch_size
+
+def load_train_func(index):
     return x_train[index], y_train[index]
 
-data_iter = data_iterator_simple(load_func, len(x_train), batch_size, shuffle=True, with_file_cache=False)
+def load_valid_func(index):
+    return x_valid[index], y_valid[index]
+
+train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size, shuffle=True, with_file_cache=False)
+valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size, shuffle=True, with_file_cache=False)
 
 def SimpleRNN(inputs, units, h0, return_sequences=False):
     '''
@@ -183,24 +195,37 @@ solver.set_parameters(nn.get_parameters())
 from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
 monitor = Monitor('./tmp-rnnlm')
 monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
+monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 
 
 for epoch in range(max_epoch):
-    loss_set = []
-    for i in tqdm(range(num_batch)):
-        x_batch, y_batch = data_iter.next()
+    train_loss_set = []
+    for i in tqdm(range(num_train_batch)):
+        x_batch, y_batch = train_data_iter.next()
         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
 
         x.d, t.d = x_batch, y_batch
         h0.d = 0
 
         loss.forward(clear_no_need_grad=True)
-        loss.forward()
-        loss_set.append(loss.d.copy())
+        train_loss_set.append(loss.d.copy())
         solver.zero_grad()
         loss.backward(clear_buffer=True)
         solver.update()
-    monitor_perplexity.add(epoch+1, np.e**np.mean(loss_set))
+
+    valid_loss_set = []
+    for i in range(num_valid_batch):
+        x_batch, y_batch = valid_data_iter.next()
+        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
+
+        x.d, t.d = x_batch, y_batch
+        h0.d = 0
+
+        loss.forward(clear_no_need_grad=True)
+        valid_loss_set.append(loss.d.copy())
+
+    monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
+    monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
 
 
 
