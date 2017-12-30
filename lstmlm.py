@@ -144,9 +144,7 @@ def LSTM(inputs, units, return_sequences=False):
 
     if return_sequences:
         hs = F.concatenate(*hs, axis=1)
-        print(hs)
         hs = F.reshape(hs, (batch_size, sentence_length, units))
-        print(hs)
         return hs
     else:
         return hs[-1]
@@ -199,7 +197,7 @@ solver.set_parameters(nn.get_parameters())
 
 # Create monitor.
 from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-rnnlm')
+monitor = Monitor('./tmp-lstmlm')
 monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
 monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 

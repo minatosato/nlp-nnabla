@@ -1,5 +1,5 @@
 # Neural language models
-implementation of neural language models with Sony's NNabla
+Tiny implementation of neural language models with Sony's NNabla
 
 ## Requirements
 - NNabla v0.9.7
@@ -8,7 +8,7 @@ implementation of neural language models with Sony's NNabla
 - tqdm v4.19.5
 
 ## Models
-- Recurrent neural network language model (`rnnlm.py`)
+- A vanilla ecurrent neural network language model (`rnnlm.py`)
 - LSTM language model (`lstmlm.py`)
 
 ## Future work
