@@ -8,10 +8,10 @@ implementation of neural language models with Sony's NNabla
 - tqdm v4.19.5
 
 ## Models
-- Recurrent neural network language model
+- Recurrent neural network language model (`rnnlm.py`)
+- LSTM language model (`lstmlm.py`)
 
 ## Future work
-- LSTM language model
 - Character-level neural language model
 - Skip-gram model
 - Continuous-BoW model
