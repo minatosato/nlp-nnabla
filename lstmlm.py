@@ -107,9 +107,9 @@ def load_valid_func(index):
 train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size, shuffle=True, with_file_cache=False)
 valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size, shuffle=True, with_file_cache=False)
 
-def SimpleRNN(inputs, units, return_sequences=False):
+def LSTM(inputs, units, return_sequences=False):
     '''
-    A vanilla recurrent neural network layer
+    A long short-term memory layer
     Args:
         inputs (nnabla.Variable): A shape of [B, SentenceLength, EmbeddingSize].
         units (int): Dimensionality of the output space.
@@ -123,23 +123,30 @@ def SimpleRNN(inputs, units, return_sequences=False):
     hs = []
     batch_size = inputs.shape[0]
     sentence_length = inputs.shape[1]
+    c0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
     h0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
 
-    inputs = F.split(inputs, axis=1) # split in the direction of sequence
+    inputs = F.split(inputs, axis=1)
 
-    h = h0
+    cell = c0
+    hidden = h0
+
     for x in inputs:
-        with nn.parameter_scope('x2h'):
-            x2h = PF.affine(x, units, with_bias=False)
-        with nn.parameter_scope('h2h'):
-            h2h = PF.affine(h, units)
-        h = F.tanh(x2h + h2h)
+        a = F.tanh(PF.affine(x, units, with_bias=False, name='Wa') + PF.affine(hidden, units, name='Ra'))
+        input_gate = F.sigmoid(PF.affine(x, units, with_bias=False, name='Wi') + PF.affine(hidden, units, name='Ri'))
+        forgate_gate = F.sigmoid(PF.affine(x, units, with_bias=False, name='Wf') + PF.affine(hidden, units, name='Rf'))
+        cell = input_gate * a + forgate_gate * cell
+        output_gate = F.sigmoid(PF.affine(x, units, with_bias=False, name='Wo') + PF.affine(hidden, units, name='Ro'))
+        hidden = output_gate * F.tanh(cell)
         if return_sequences:
-            h = F.reshape(h, (batch_size, 1, units))
-        hs.append(h)
+            hidden = F.reshape(hidden, (batch_size, 1, units))
+        hs.append(hidden)
 
     if return_sequences:
         hs = F.concatenate(*hs, axis=1)
+        print(hs)
+        hs = F.reshape(hs, (batch_size, sentence_length, units))
+        print(hs)
         return hs
     else:
         return hs[-1]
@@ -177,7 +184,7 @@ def TimeDistributedSoftmaxCrossEntropy(y_pred, y_true):
 x = nn.Variable((batch_size, sentence_length))
 t = nn.Variable((batch_size, sentence_length, 1))
 h = PF.embed(x, vocab_size, embedding_size)
-h = SimpleRNN(h, hidden, return_sequences=True)
+h = LSTM(h, hidden, return_sequences=True)
 h = TimeDistributedAffine(h, hidden, name='hidden')
 y = TimeDistributedAffine(h, vocab_size, name='output')
 
