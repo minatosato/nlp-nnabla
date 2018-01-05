@@ -17,7 +17,8 @@ Tiny implementation of neural language models with Sony's NNabla
 - A vanilla recurrent neural network language model (`rnnlm.py`)
 - LSTM language model (`lstmlm.py`)
 - Character-level neural language model (`char-cnn-lstmlm.py`)
-  - this is not completely same implementation of a paper ["Character-Aware Neural Language Models"](https://arxiv.org/abs/1508.06615).
+  
+  - this is not completely same implementation of a paper ["Character-Aware Neural Language Models"](https://arxiv.org/abs/1508.06615).
 
 ## Future work
 - Skip-gram model
