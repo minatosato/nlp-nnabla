@@ -35,7 +35,7 @@ from tqdm import tqdm
 
 """cuda setting"""
 from nnabla.contrib.context import extension_context
-ctx = extension_context('cuda.cudnn', device_id=0)
+ctx = extension_context('cuda.cudnn', device_id=1)
 nn.set_default_context(ctx)
 """"""
 
@@ -183,20 +183,17 @@ def LSTM(inputs, units, return_sequences=False, name='lstm'):
     else:
         return hs[-1]
 
-def TimeDistributedAffine(x, units, name='output'):
-    '''
-    A time distributed softmax crossentropy
-    Args:
-        x (nnabla.Variable): A shape of [B, SentenceLength, EmbeddingSize]
-    Returns:
-        nn.Variable: A shape [B, SentenceLength, units].
-    '''
-    # return PF.affine(x, units, base_axis=2, name=name)
-    ret = []
-    batch_size = x.shape[0]
-    for x_ in F.split(x, axis=1):
-        ret.append(F.reshape(PF.affine(x_, units, name=name), (batch_size, 1, units)))
-    return F.concatenate(*ret, axis=1)
+def TimeDistributed(func):
+    def TimeDistributedFunc(x, *args, **kwargs):
+        ret = []
+        batch_size = x.shape[0]
+        units = x.shape[2]
+        for x_ in F.split(x, axis=1):
+            value = func(x_, *args, **kwargs)
+            _, output_dim = value.shape
+            ret.append(F.reshape(value, (batch_size, 1, output_dim)))
+        return F.concatenate(*ret, axis=1)
+    return TimeDistributedFunc
 
 def Highway(x, name='highway'):
     '''
@@ -215,22 +212,6 @@ def Highway(x, name='highway'):
             out_transform = F.sigmoid(PF.affine(x, in_out_size))
     y = out_plain * out_transform + x * (1 - out_transform)
     return y
-
-def TimeDistributedHighway(x, name='highway'):
-    '''
-    A time distributed densely connected highway network layer
-    Args:
-        x (nnabla.Variable): A shape of [B, SentenceLength, EmbeddingSize]
-    Returns:
-        nn.Variable: A shape [B, SentenceLength, EmbeddingSize].
-    '''    
-    ret = []
-    batch_size = x.shape[0]
-    units = x.shape[2]
-    for x_ in F.split(x, axis=1):
-        ret.append(F.reshape(Highway(x_, name=name), (batch_size, 1, units)))
-    return F.concatenate(*ret, axis=1)
-
 
 def TimeDistributedSoftmaxCrossEntropy(y_pred, y_true):
     '''
@@ -266,12 +247,12 @@ h = F.concatenate(*output, axis=1)
 h = F.transpose(h, (0, 2, 1, 3))
 h = F.reshape(h, (batch_size, sentence_length, sum(filters)))
 # h = PF.batch_normalization(h, axes=[2])
-h = TimeDistributedHighway(h, name='highway1')
-h = TimeDistributedHighway(h, name='highway2')
+h = TimeDistributed(Highway)(h, name='highway1')
+h = TimeDistributed(Highway)(h, name='highway2')
 h = LSTM(h, lstm_size, return_sequences=True, name='lstm1')
 h = LSTM(h, lstm_size, return_sequences=True, name='lstm2')
-h = TimeDistributedAffine(h, lstm_size, name='hidden')
-y = TimeDistributedAffine(h, word_vocab_size, name='output')
+h = TimeDistributed(PF.affine)(h, lstm_size, name='hidden')
+y = TimeDistributed(PF.affine)(h, word_vocab_size, name='output')
 t = nn.Variable((batch_size, sentence_length, 1))
 
 mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
