@@ -39,7 +39,7 @@ from layers import TimeDistributedSoftmaxCrossEntropy
 
 """cuda setting"""
 from nnabla.contrib.context import extension_context
-ctx = extension_context('cuda.cudnn', device_id=0)
+ctx = extension_context('cuda.cudnn', device_id=1)
 nn.set_default_context(ctx)
 """"""
 
@@ -87,7 +87,8 @@ h = SimpleRNN(h, hidden, return_sequences=True)
 h = TimeDistributed(PF.affine)(h, hidden, name='hidden')
 y = TimeDistributed(PF.affine)(h, vocab_size, name='output')
 
-mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
+mask = F.sum(F.greater_scalar(t, 0), axis=2) # do not predict 'pad'.
+# mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
 entropy = TimeDistributedSoftmaxCrossEntropy(y, t) * mask
 count = F.sum(mask, axis=1)
 loss = F.mean(F.div2(F.sum(entropy, axis=1), count))

@@ -129,7 +129,6 @@ def TimeDistributed(func):
     def TimeDistributedFunc(x, *args, **kwargs):
         ret = []
         batch_size = x.shape[0]
-        units = x.shape[2]
         for x_ in F.split(x, axis=1):
             value = func(x_, *args, **kwargs)
             _, output_dim = value.shape

@@ -87,10 +87,8 @@ valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size
 
 char_embedding_dim = 16
 lstm_size = 650
-filters = [50, 150, 200, 200]
-filster_sizes = [1, 3, 5, 7]
-# filters = [50, 100, 150, 200, 200, 200, 200]
-# filster_sizes = [1, 2, 3, 4, 5, 6, 7]
+filters = [50, 100, 150, 200, 200, 200, 200]
+filster_sizes = [1, 2, 3, 4, 5, 6, 7]
 
 x = nn.Variable((batch_size, sentence_length, word_length))
 h = PF.embed(x, char_vocab_size, char_embedding_dim)
@@ -103,7 +101,6 @@ for f, f_size in zip(filters, filster_sizes):
 h = F.concatenate(*output, axis=1)
 h = F.transpose(h, (0, 2, 1, 3))
 h = F.reshape(h, (batch_size, sentence_length, sum(filters)))
-# h = PF.batch_normalization(h, axes=[2])
 h = TimeDistributed(Highway)(h, name='highway1')
 h = TimeDistributed(Highway)(h, name='highway2')
 h = LSTM(h, lstm_size, return_sequences=True, name='lstm1')
