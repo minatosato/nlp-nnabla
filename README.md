@@ -7,7 +7,7 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
 - Numpy v1.13.3
 - tqdm v4.19.5
 
-## New features (different from the master of the NNabla repository)
+## New features (different from the master respository of the NNabla)
 - RNN layer
 - LSTM layer
 - Highway layer
