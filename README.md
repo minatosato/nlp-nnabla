@@ -23,8 +23,8 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
   - this is not completely same implementation of a paper ["Character-Aware Neural Language Models"](https://arxiv.org/abs/1508.06615).
 
 ### Seq2Seq models
-- Encoder-decoder
-- Encoder-decoder + global attention
+- Encoder-decoder (`encdec.py`)
+- Encoder-decoder + global attention (`attention.py`)
 
 ## Future work
 - Skip-gram model
