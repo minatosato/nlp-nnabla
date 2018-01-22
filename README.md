@@ -1,5 +1,5 @@
-# Neural language models
-Tiny implementation of neural language models with Sony's NNabla
+# Deep learning implementation for NLP with NNabla
+Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
 ## Test environment
 - NNabla v0.9.7
@@ -14,12 +14,22 @@ Tiny implementation of neural language models with Sony's NNabla
 - Time distributed parametric functions
 
 ## Models
+
+### Language models
 - A vanilla recurrent neural network language model (`rnnlm.py`)
 - LSTM language model (`lstmlm.py`)
 - Character-level neural language model (`char-cnn-lstmlm.py`)
   
   - this is not completely same implementation of a paper ["Character-Aware Neural Language Models"](https://arxiv.org/abs/1508.06615).
 
+### Seq2Seq models
+- Encoder-decoder
+- Encoder-decoder + global attention
+
 ## Future work
 - Skip-gram model
 - Continuous-BoW model
+- Encoder-decoder + local attention
+- Peephole LSTM
+- GRU
+- etc.
