@@ -216,15 +216,20 @@ def LSTMAttentionDecoder(inputs=None, encoder_output=None, initial_state=None, r
     else:
         assert batch_size == 1, 'batch size of inference mode must be 1.'
         embed_weight, output_weight, output_bias = inference_params
-        x = nn.Variable.from_numpy_array(np.ones((1, embed_weight.shape[1])))
+        pad = nn.Variable.from_numpy_array(np.array([w2i_source['pad']]*batch_size))
+        x = PF.embed(pad, vocab_size_source, embedding_size, name='enc_embeddings')
+
+        compute_context = GlobalAttention(encoder_output, 1024)
 
         word_index = 0
         ret = []
         i = 0
         while i2w_target[word_index] != '。' and i < 20:
             with nn.parameter_scope(name):
-                cell, hidden = AttentionLSTMCell(x, cell, hidden, encoder_output)
-            output = F.affine(hidden, output_weight, bias=output_bias)
+                cell, hidden = LSTMCell(x, cell, hidden)
+                context = compute_context(hidden)
+                h_t = F.tanh(PF.affine(F.concatenate(context, hidden, axis=1), 1024, with_bias=False, name='Wc'))
+            output = F.affine(h_t, output_weight, bias=output_bias)
             word_index = np.argmax(output.d[0])
             ret.append(word_index)
             x = nn.Variable.from_numpy_array(np.array([word_index], dtype=np.int32))
@@ -259,7 +264,7 @@ def predict(x):
         params = [nn.get_parameters()['dec_embeddings/embed/W'],
                   nn.get_parameters()['output/affine/W'],
                   nn.get_parameters()['output/affine/b']]
-        ret = LSTMAttentionDecoder(initial_state=(c, h), inference_params=params, name='decoder')
+        ret = LSTMAttentionDecoder(encoder_output=output, initial_state=(c, h), inference_params=params, name='decoder')
 
         return ret
 
@@ -277,14 +282,19 @@ def build_model():
     y = nn.Variable((batch_size, sentence_length_target))
     
     enc_input = TimeDistributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')#*input_mask
+    # -> (batch_size, sentence_length_source, embedding_size)
     dec_input = TimeDistributed(PF.embed)(y, vocab_size_target, embedding_size, name='dec_embeddings')
+    # -> (batch_size, sentence_length_target, embedding_size)
 
     # encoder
     output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True, name='encoder')
+    # -> (batch_size, sentence_length_source, hidden), (batch_size, hidden), (batch_size, hidden)
 
     # decoder
     output = LSTMAttentionDecoder(dec_input, output, initial_state=(c, h), return_sequences=True, name='decoder')
+    # -> (batch_size, sentence_length_target, hidden)
     output = TimeDistributed(PF.affine)(output, vocab_size_target, name='output')
+    # -> (batch_size, sentence_length_target, vocab_size_target)
 
     t = F.reshape(F.slice(y), (batch_size, sentence_length_target, 1))
 
