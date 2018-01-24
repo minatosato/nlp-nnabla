@@ -268,13 +268,19 @@ def predict(x):
 
         return ret
 
-def translate(index):
+def translate_test(index):
     print('source:')
     print(' '.join([i2w_source[i] for i in test_source[index]][::-1]).strip(' pad'))
     print('target:')
     print(''.join([i2w_target[i] for i in test_target[index]]).strip('pad'))
     print('encoder-decoder output:')
     print(''.join([i2w_target[i] for i in predict(test_source[index])]).strip('pad'))
+
+def translate(sentence):
+    sentence = list(map(lambda x: w2i_source[x], sentence.split()))
+    sentence += [0]*(sentence_length_source - len(sentence))
+    sentence.reverse()
+    return ''.join([i2w_target[i] for i in predict(np.array([sentence]))])
 
 def build_model():
     x = nn.Variable((batch_size, sentence_length_source))
