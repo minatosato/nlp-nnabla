@@ -1,4 +1,4 @@
-## Sequence-to-Sequence translation models
+# Sequence-to-Sequence translation models
 Tiny implementation of seq2seq translation models.
 
 ## Models
@@ -27,13 +27,13 @@ ipython
 run attention.py
 Ctrl+C (interrupt)
 
-!wget hogehoge
+!wget https://github.com/satopirka/nlp-nnabla/releases/download/v0.0.1-alpha/attention_en2ja.h5
 nn.load_parameters('attention_en2ja.h5')
 ```
 
 And you can try to translate by the model like below:
 
-```ipython
+```python
 nn.load_parameters('attention_en2ja.h5')
 
 In [71]: translate("i was unable to look her in the face .")
@@ -42,7 +42,7 @@ Out[71]: '彼女の顔をまともに見ることが出来なかった。'
 In [79]: translate("how far is it to the station ?")
 Out[79]: '駅までどのくらいありますか。'
 
-In [63]: translate("he is an very kind man .")
+In [63]: translate("he is a very kind man .")
 Out[63]: '彼はとても親切な男だ。'
 
 In [64]: translate('she is a very kind woman .')
