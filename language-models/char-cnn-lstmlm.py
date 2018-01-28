@@ -1,25 +1,10 @@
-# MIT License
 # 
 # Copyright (c) 2017-2018 Minato Sato
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+#
 
 from collections import OrderedDict
 import pickle
@@ -58,7 +43,7 @@ valid_data = sequence.pad_sequences(valid_data, padding='post')
 
 sentence_length = 20
 batch_size = 256
-max_epoch = 100
+max_epoch = 300
 
 word_vocab_size = len(w2i)
 char_vocab_size = len(c2i)
@@ -90,29 +75,37 @@ lstm_size = 650
 filters = [50, 100, 150, 200, 200, 200, 200]
 filster_sizes = [1, 2, 3, 4, 5, 6, 7]
 
-x = nn.Variable((batch_size, sentence_length, word_length))
-h = PF.embed(x, char_vocab_size, char_embedding_dim)
-h = F.transpose(h, (0, 3, 1, 2))
-output = []
-for f, f_size in zip(filters, filster_sizes):
-    _h = PF.convolution(h, f, kernel=(1, f_size), pad=(0, f_size//2), name='conv_{}'.format(f_size))
-    _h = F.max_pooling(_h, kernel=(1, word_length))
-    output.append(_h)
-h = F.concatenate(*output, axis=1)
-h = F.transpose(h, (0, 2, 1, 3))
-h = F.reshape(h, (batch_size, sentence_length, sum(filters)))
-h = TimeDistributed(Highway)(h, name='highway1')
-h = TimeDistributed(Highway)(h, name='highway2')
-h = LSTM(h, lstm_size, return_sequences=True, name='lstm1')
-h = LSTM(h, lstm_size, return_sequences=True, name='lstm2')
-h = TimeDistributed(PF.affine)(h, lstm_size, name='hidden')
-y = TimeDistributed(PF.affine)(h, word_vocab_size, name='output')
-t = nn.Variable((batch_size, sentence_length, 1))
+def build_model(get_embeddings=False):
+    x = nn.Variable((batch_size, sentence_length, word_length))
+    h = PF.embed(x, char_vocab_size, char_embedding_dim)
+    h = F.transpose(h, (0, 3, 1, 2))
+    output = []
+    for f, f_size in zip(filters, filster_sizes):
+        _h = PF.convolution(h, f, kernel=(1, f_size), pad=(0, f_size//2), name='conv_{}'.format(f_size))
+        _h = F.max_pooling(_h, kernel=(1, word_length))
+        output.append(_h)
+    h = F.concatenate(*output, axis=1)
+    h = F.transpose(h, (0, 2, 1, 3))
+    embeddings = F.reshape(h, (batch_size, sentence_length, sum(filters)))
 
-mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
-entropy = TimeDistributedSoftmaxCrossEntropy(y, t) * mask
-count = F.sum(mask, axis=1)
-loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
+    if get_embeddings:
+        return x, embeddings
+
+    h = TimeDistributed(Highway)(embeddings, name='highway1')
+    h = TimeDistributed(Highway)(h, name='highway2')
+    h = LSTM(h, lstm_size, return_sequences=True, name='lstm1')
+    h = LSTM(h, lstm_size, return_sequences=True, name='lstm2')
+    h = TimeDistributed(PF.affine)(h, lstm_size, name='hidden')
+    y = TimeDistributed(PF.affine)(h, word_vocab_size, name='output')
+    t = nn.Variable((batch_size, sentence_length, 1))
+
+    mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
+    entropy = TimeDistributedSoftmaxCrossEntropy(y, t) * mask
+    count = F.sum(mask, axis=1)
+    loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
+    return x, t, loss
+
+x, t, loss = build_model()
 
 # Create solver.
 solver = S.Momentum(1e-2, momentum=0.9)
@@ -124,6 +117,7 @@ monitor = Monitor('./tmp-char-cnn-lstm')
 monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
 monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 
+best_dev_loss = 9999
 
 for epoch in range(max_epoch):
     train_loss_set = []
@@ -140,7 +134,7 @@ for epoch in range(max_epoch):
         solver.weight_decay(1e-5)
         solver.update()
 
-    valid_loss_set = []
+    dev_loss_set = []
     for i in range(num_valid_batch):
         x_batch, y_batch = valid_data_iter.next()
         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
@@ -148,10 +142,59 @@ for epoch in range(max_epoch):
         x.d, t.d = x_batch, y_batch
 
         loss.forward(clear_no_need_grad=True)
-        valid_loss_set.append(loss.d.copy())
+        dev_loss_set.append(loss.d.copy())
 
     monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
-    monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
+    monitor_perplexity_valid.add(epoch+1, np.e**np.mean(dev_loss_set))
+
+    dev_loss = np.e**np.mean(dev_loss_set)
+    if best_dev_loss > dev_loss:
+        best_dev_loss = dev_loss
+        print('best dev loss updated! {}'.format(dev_loss))
+        nn.save_parameters('char-cnn-lstm_best.h5')
+
+nn.load_parameters('char-cnn-lstm_best.h5')
+
+batch_size = 1
+sentence_length = 1
+x, embeddings = build_model(get_embeddings=True)
+
+W = np.zeros((len(w2i), sum(filters)))
+for i, word in enumerate(w2i):
+    vec = wordseq2charseq([[w2i[word]]])
+    x.d = vec
+    embeddings.forward()
+    W[w2i[word], :] = embeddings.d[0][0]
+
+def get_word_from_id(id):
+    return i2w[id]
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+def get_top_k(word, k=5):
+    global W
+    if word not in w2i:
+        w2i[word] = len(w2i)
+        i2w[w2i[word]] = word
+        W = np.zeros((len(w2i), sum(filters)))
+        for i, w in enumerate(w2i):
+            vec = wordseq2charseq([[w2i[w]]])
+            x.d = vec
+            embeddings.forward()
+            W[w2i[w], :] = embeddings.d[0][0]
+    cosine_similarity_set = cosine_similarity([W[w2i[word]]], W)[0]
+    top_k = cosine_similarity_set.argsort()[-(k+1):-1][::-1]
+    return list(map(get_word_from_id, top_k))
+
+search_words = ['while', 'his', 'you', 'richard', 'trading', 'computer-aided', 'misinformed', 'looooook']
+
+for query in search_words:
+    print("----------------")
+    print(query + ' -> ', end='')
+    print(get_top_k(query))
+print("----------------")
+
+
 
 
 
