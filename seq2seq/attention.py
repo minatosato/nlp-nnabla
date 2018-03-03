@@ -29,17 +29,17 @@ nn.set_default_context(ctx)
 # nn.load_parameters('encdec_best.h5')
 
 from utils import load_data
-from keras.preprocessing import sequence
+from utils import with_padding
 
 train_source, dev_source, test_source, w2i_source, i2w_source = load_data('./data', 'en')
-train_source = sequence.pad_sequences(train_source, padding='post')[:,::-1].astype(np.int32)
-dev_source = sequence.pad_sequences(dev_source, padding='post')[:,::-1].astype(np.int32)
-test_source = sequence.pad_sequences(test_source, padding='post')[:,::-1].astype(np.int32)
+train_source = with_padding(train_source, padding_type='post')[:,::-1].astype(np.int32)
+dev_source = with_padding(dev_source, padding_type='post')[:,::-1].astype(np.int32)
+test_source = with_padding(test_source, padding_type='post')[:,::-1].astype(np.int32)
 
 train_target, dev_target, test_target, w2i_target, i2w_target = load_data('./data', 'ja')
-train_target = sequence.pad_sequences(train_target, padding='post').astype(np.int32)
-dev_target = sequence.pad_sequences(dev_target, padding='post').astype(np.int32)
-test_target = sequence.pad_sequences(test_target, padding='post').astype(np.int32)
+train_target = with_padding(train_target, padding_type='post').astype(np.int32)
+dev_target = with_padding(dev_target, padding_type='post').astype(np.int32)
+test_target = with_padding(test_target, padding_type='post').astype(np.int32)
 
 vocab_size_source = len(w2i_source)
 vocab_size_target = len(w2i_target)

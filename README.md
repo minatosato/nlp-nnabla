@@ -3,8 +3,7 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
 ## Test environment
 - NNabla v0.9.7
-- Keras v2.1.2 (for preprocessing)
-- Numpy v1.13.3
+- Numpy v1.14.0
 - tqdm v4.19.5
 
 ## New features (different from the master respository of the NNabla)
