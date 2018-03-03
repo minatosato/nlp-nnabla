@@ -65,3 +65,27 @@ def wordseq2charseq(data):
             for k, char in enumerate(i2w[word]):
                 data[i][j][k] = c2i[char]
     return data
+
+def with_padding(sequences, padding_type='post', max_sequence_length=None):
+    if max_sequence_length is None:
+        max_sequence_length = max(map(lambda x: len(x), sequences))
+    else:
+        assert type(max_sequence_length) == int, 'max_sequence_length is must be an integer.'
+
+    def _with_padding(sequence):
+        sequence = sequence[:max_sequence_length]
+        sequence_length = len(sequence)
+        pad_length = max_sequence_length - sequence_length
+        if padding_type == 'post':
+            return sequence + [0] * pad_length
+        elif padding_type == 'pre':
+            return [0] * pad_length + sequence
+        else:
+            raise 'Type error'
+
+    return np.array(list(map(_with_padding, sequences)), dtype=np.int32)
+
+
+
+
+

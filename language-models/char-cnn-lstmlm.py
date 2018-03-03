@@ -32,14 +32,13 @@ nn.set_default_context(ctx)
 from utils import load_data
 from utils import wordseq2charseq
 from utils import w2i, i2w, c2i, i2c, word_length
-
-from keras.preprocessing import sequence
+from utils import with_padding
 
 train_data = load_data('./ptb/train.txt')
-train_data = sequence.pad_sequences(train_data, padding='post')
+train_data = with_padding(train_data, padding_type='post')
 
 valid_data = load_data('./ptb/valid.txt')
-valid_data = sequence.pad_sequences(valid_data, padding='post')
+valid_data = with_padding(valid_data, padding_type='post')
 
 sentence_length = 20
 batch_size = 256
