@@ -62,7 +62,7 @@ def with_padding(sequences, padding_type='post', max_sequence_length=None):
         elif padding_type == 'pre':
             return [0] * pad_length + sequence
         else:
-            raise 'Type error'
+            raise Exception('padding type error. padding type must be "post" or "pre"')
 
     return np.array(list(map(_with_padding, sequences)), dtype=np.int32)
 
