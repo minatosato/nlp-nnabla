@@ -51,7 +51,8 @@ def with_padding(sequences, padding_type='post', max_sequence_length=None):
     if max_sequence_length is None:
         max_sequence_length = max(map(lambda x: len(x), sequences))
     else:
-        assert type(max_sequence_length) == int, 'max_sequence_length is must be an integer.'
+        assert type(max_sequence_length) == int, 'max_sequence_length must be an integer.'
+        assert max_sequence_length > 0, 'max_sequence_length must be a positive integer.'
 
     def _with_padding(sequence):
         sequence = sequence[:max_sequence_length]
