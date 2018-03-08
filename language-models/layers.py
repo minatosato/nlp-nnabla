@@ -11,13 +11,16 @@ import nnabla.functions as F
 import nnabla.parametric_functions as PF
 import numpy as np
 
-def SimpleRNN(inputs, units, return_sequences=False):
+
+@PF.parametric_function_api('simple_rnn')
+def simple_rnn(inputs, units, return_sequences=False, fix_parameters=False):
     '''
     A vanilla recurrent neural network layer
     Args:
         inputs (nnabla.Variable): A shape of [B, SentenceLength, EmbeddingSize].
         units (int): Dimensionality of the output space.
         return_sequences (bool): Whether to return the last output. in the output sequence, or the full sequence.
+        fix_parameters (bool): Fix parameters (Set need_grad=False).
     Returns:
         nn.Variable: A shape [B, SentenceLength, units].
         or
@@ -33,17 +36,11 @@ def SimpleRNN(inputs, units, return_sequences=False):
 
     h = h0
     for x in inputs:
-        with nn.parameter_scope('x2h'):
-            x2h = PF.affine(x, units, with_bias=False)
-        with nn.parameter_scope('h2h'):
-            h2h = PF.affine(h, units)
-        h = F.tanh(x2h + h2h)
-        if return_sequences:
-            h = F.reshape(h, (batch_size, 1, units))
+        h = F.tanh(PF.affine(F.concatenate(x, h, axis=1), units, fix_parameters=fix_parameters))
         hs.append(h)
 
     if return_sequences:
-        hs = F.concatenate(*hs, axis=1)
+        hs = F.stack(*hs, axis=1)
         return hs
     else:
         return hs[-1]

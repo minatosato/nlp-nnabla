@@ -19,7 +19,7 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from layers import SimpleRNN
+from layers import simple_rnn
 from layers import TimeDistributed
 from layers import TimeDistributedSoftmaxCrossEntropy
 
@@ -42,7 +42,7 @@ valid_data = with_padding(valid_data, padding_type='post')
 vocab_size = len(w2i)
 sentence_length = 20
 embedding_size = 128
-hidden = 128
+hidden_size = 128
 batch_size = 256
 max_epoch = 100
 
@@ -66,10 +66,14 @@ valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size
 
 x = nn.Variable((batch_size, sentence_length))
 t = nn.Variable((batch_size, sentence_length, 1))
-h = PF.embed(x, vocab_size, embedding_size)
-h = SimpleRNN(h, hidden, return_sequences=True)
-h = TimeDistributed(PF.affine)(h, hidden, name='hidden')
-y = TimeDistributed(PF.affine)(h, vocab_size, name='output')
+with nn.parameter_scope('embedding'):
+    h = PF.embed(x, vocab_size, embedding_size)
+with nn.parameter_scope('rnn1'):
+    h = simple_rnn(h, hidden_size, return_sequences=True)
+with nn.parameter_scope('hidden'):
+    h = TimeDistributed(PF.affine)(h, hidden_size)
+with nn.parameter_scope('output'):
+    y = TimeDistributed(PF.affine)(h, vocab_size)
 
 mask = F.sum(F.greater_scalar(t, 0), axis=2) # do not predict 'pad'.
 # mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
