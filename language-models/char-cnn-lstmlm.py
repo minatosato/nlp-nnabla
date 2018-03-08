@@ -18,7 +18,7 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from layers import LSTM
+from layers import lstm
 from layers import Highway
 from layers import TimeDistributed
 from layers import TimeDistributedSoftmaxCrossEntropy
@@ -92,10 +92,14 @@ def build_model(get_embeddings=False):
 
     h = TimeDistributed(Highway)(embeddings, name='highway1')
     h = TimeDistributed(Highway)(h, name='highway2')
-    h = LSTM(h, lstm_size, return_sequences=True, name='lstm1')
-    h = LSTM(h, lstm_size, return_sequences=True, name='lstm2')
-    h = TimeDistributed(PF.affine)(h, lstm_size, name='hidden')
-    y = TimeDistributed(PF.affine)(h, word_vocab_size, name='output')
+    with nn.parameter_scope('lstm1'):
+        h = lstm(h, lstm_size, return_sequences=True)
+    with nn.parameter_scope('lstm2'):
+        h = lstm(h, lstm_size, return_sequences=True)
+    with nn.parameter_scope('hidden'):
+        h = TimeDistributed(PF.affine)(h, lstm_size)
+    with nn.parameter_scope('output'):
+        y = TimeDistributed(PF.affine)(h, word_vocab_size)
     t = nn.Variable((batch_size, sentence_length, 1))
 
     mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.

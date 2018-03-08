@@ -45,49 +45,73 @@ def simple_rnn(inputs, units, return_sequences=False, fix_parameters=False):
     else:
         return hs[-1]
 
+def lstm_cell(x, c, h):
+    batch_size, units = c.shape
+    _hidden = PF.affine(F.concatenate(x, h, axis=1), 4*units)
 
-def LSTM(inputs, units, return_sequences=False, name='lstm'):
+    a            = F.tanh   (F.slice(_hidden, start=(0, units*0), stop=(batch_size, units*1)))
+    input_gate   = F.sigmoid(F.slice(_hidden, start=(0, units*1), stop=(batch_size, units*2)))
+    forgate_gate = F.sigmoid(F.slice(_hidden, start=(0, units*2), stop=(batch_size, units*3)))
+    output_gate  = F.sigmoid(F.slice(_hidden, start=(0, units*3), stop=(batch_size, units*4)))
+
+    cell = input_gate * a + forgate_gate * c
+    hidden = output_gate * F.tanh(cell)
+    return cell, hidden
+
+@PF.parametric_function_api('lstm')
+def lstm(inputs, units, initial_state=None, return_sequences=False, return_state=False, fix_parameters=False):
     '''
-    A long short-term memory layer
+    A long short-term memory
     Args:
         inputs (nnabla.Variable): A shape of [B, SentenceLength, EmbeddingSize].
         units (int): Dimensionality of the output space.
+        initial_state ([nnabla.Variable, nnabla.Variable]): A tuple of an initial cell and an initial hidden state.
         return_sequences (bool): Whether to return the last output. in the output sequence, or the full sequence.
+        return_state (bool): Whether to return the last state which is consist of the cell and the hidden state.
+        fix_parameters (bool): Fix parameters (Set need_grad=False).
     Returns:
         nn.Variable: A shape [B, SentenceLength, units].
         or
         nn.Variable: A shape [B, units]
     '''
-
-    hs = []
+    
     batch_size = inputs.shape[0]
-    sentence_length = inputs.shape[1]
-    c0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
-    h0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
 
-    inputs = F.split(inputs, axis=1)
+    if initial_state is None:
+        c0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
+        h0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
+    else:
+        assert type(initial_state) is tuple or type(initial_state) is list, \
+               'initial_state must be a typle or a list.'
+        assert len(initial_state) == 2, \
+               'initial_state must have only two states.'
+
+        c0, h0 = initial_state
+
+        assert c0.shape == h0.shape, 'shapes of initial_state must be same.'
+        assert c0.shape[0] == batch_size, \
+               'batch size of initial_state ({0}) is different from that of inputs ({1}).'.format(c0.shape[0], batch_size)
+        assert c0.shape[1] == units, \
+               'units size of initial_state ({0}) is different from that of units of args ({1}).'.format(c0.shape[1], units)
 
     cell = c0
     hidden = h0
 
-    with nn.parameter_scope(name):
-        for x in inputs:
-            a = F.tanh(PF.affine(x, units, with_bias=False, name='Wa') + PF.affine(hidden, units, name='Ra'))
-            input_gate = F.sigmoid(PF.affine(x, units, with_bias=False, name='Wi') + PF.affine(hidden, units, name='Ri'))
-            forgate_gate = F.sigmoid(PF.affine(x, units, with_bias=False, name='Wf') + PF.affine(hidden, units, name='Rf'))
-            cell = input_gate * a + forgate_gate * cell
-            output_gate = F.sigmoid(PF.affine(x, units, with_bias=False, name='Wo') + PF.affine(hidden, units, name='Ro'))
-            hidden = output_gate * F.tanh(cell)
-            if return_sequences:
-                hidden = F.reshape(hidden, (batch_size, 1, units))
-            hs.append(hidden)
+    hs = []
+
+    for x in F.split(inputs, axis=1):
+        cell, hidden = lstm_cell(x, cell, hidden)
+        hs.append(hidden)
 
     if return_sequences:
-        hs = F.concatenate(*hs, axis=1)
-        hs = F.reshape(hs, (batch_size, sentence_length, units))
-        return hs
+        ret = F.stack(*hs, axis=1)
     else:
-        return hs[-1]
+        ret = hs[-1]
+
+    if return_state:
+        return ret, cell, hidden
+    else:
+        return ret
 
 
 def Highway(x, name='highway'):
