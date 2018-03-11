@@ -6,11 +6,15 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
 - Numpy v1.14.0
 - tqdm v4.19.5
 
-## New features (different from the master respository of the NNabla)
-- RNN layer
-- LSTM layer
-- Highway layer
-- Time distributed parametric functions
+## New functions (different from the NNabla v0.9.7)
+### Parametric functions
+- `simple_rnn`
+- `lstm`
+- `highway`
+
+### Functions
+- `time_distributed`
+- `time_distributed_softmax_cross_entropy`
 
 ## Models
 
