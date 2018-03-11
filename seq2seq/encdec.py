@@ -18,8 +18,11 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from layers import TimeDistributed
-from layers import TimeDistributedSoftmaxCrossEntropy
+from parametric_functions import lstm
+from parametric_functions import lstm_cell
+
+from functions import time_distributed
+from functions import time_distributed_softmax_cross_entropy
 
 """cuda setting"""
 from nnabla.contrib.context import extension_context
@@ -74,61 +77,7 @@ dev_data_iter = data_iterator_simple(load_dev_func, len(dev_source), batch_size,
 #             ret.append(F.reshape(_c_prev, (1, units)))
 #     return F.concatenate(*ret, axis=0)
 
-def LSTMCell(x, c, h):
-    batch_size, units = c.shape
-    _hidden = PF.affine(F.concatenate(x, h, axis=1), 4*units, name='WaRaWiRiWfRfWoRo')
-
-    a            = F.tanh   (F.slice(_hidden, start=(0, units*0), stop=(batch_size, units*1)))
-    input_gate   = F.sigmoid(F.slice(_hidden, start=(0, units*1), stop=(batch_size, units*2)))
-    forgate_gate = F.sigmoid(F.slice(_hidden, start=(0, units*2), stop=(batch_size, units*3)))
-    output_gate  = F.sigmoid(F.slice(_hidden, start=(0, units*3), stop=(batch_size, units*4)))
-
-    cell = input_gate * a + forgate_gate * c
-    hidden = output_gate * F.tanh(cell)
-    return cell, hidden
-
-def LSTM(inputs, units, initial_state=None, return_sequences=False, return_state=False, name='lstm'):
-    
-    batch_size = inputs.shape[0]
-
-    if initial_state is None:
-        c0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
-        h0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
-    else:
-        assert type(initial_state) is tuple or type(initial_state) is list, \
-               'initial_state must be a typle or a list.'
-        assert len(initial_state) == 2, \
-               'initial_state must have only two states.'
-
-        c0, h0 = initial_state
-
-        assert c0.shape == h0.shape, 'shapes of initial_state must be same.'
-        assert c0.shape[0] == batch_size, \
-               'batch size of initial_state ({0}) is different from that of inputs ({1}).'.format(c0.shape[0], batch_size)
-        assert c0.shape[1] == units, \
-               'units size of initial_state ({0}) is different from that of units of args ({1}).'.format(c0.shape[1], units)
-
-    cell = c0
-    hidden = h0
-
-    hs = []
-
-    for x in F.split(inputs, axis=1):
-        with nn.parameter_scope(name):
-            cell, hidden = LSTMCell(x, cell, hidden)
-        hs.append(hidden)
-
-    if return_sequences:
-        ret = F.stack(*hs, axis=1)
-    else:
-        ret = hs[-1]
-
-    if return_state:
-        return ret, cell, hidden
-    else:
-        return ret
-
-LSTMEncoder = LSTM
+LSTMEncoder = lstm
 
 def LSTMDecoder(inputs=None, initial_state=None, return_sequences=False, return_state=False, inference_params=None, name='lstm'):
 
@@ -157,7 +106,7 @@ def LSTMDecoder(inputs=None, initial_state=None, return_sequences=False, return_
         xs = [nn.Variable.from_numpy_array(np.ones(xs[0].shape))] + list(xs)
         for x in xs:
             with nn.parameter_scope(name):
-                cell, hidden = LSTMCell(x, cell, hidden)
+                cell, hidden = lstm_cell(x, cell, hidden)
             hs.append(hidden)
     else:
         assert batch_size == 1, 'batch size of inference mode must be 1.'
@@ -169,7 +118,7 @@ def LSTMDecoder(inputs=None, initial_state=None, return_sequences=False, return_
         i = 0
         while i2w_target[word_index] != period and i < 20:
             with nn.parameter_scope(name):
-                cell, hidden = LSTMCell(x, cell, hidden)
+                cell, hidden = lstm_cell(x, cell, hidden)
             output = F.affine(hidden, output_weight, bias=output_bias)
             word_index = np.argmax(output.d[0])
             ret.append(word_index)
@@ -196,10 +145,11 @@ def predict(x):
     with nn.auto_forward():
         x = x.reshape((1, sentence_length_source))
         enc_input = nn.Variable.from_numpy_array(x)
-        enc_input = TimeDistributed(PF.embed)(enc_input, vocab_size_source, embedding_size, name='enc_embeddings')
+        enc_input = time_distributed(PF.embed)(enc_input, vocab_size_source, embedding_size, name='enc_embeddings')
 
         # encoder
-        output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True, name='encoder')
+        with nn.parameter_scope('encoder'):
+            output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True)
 
         # decoder
         params = [nn.get_parameters()['dec_embeddings/embed/W'],
@@ -221,19 +171,20 @@ def build_model():
     x = nn.Variable((batch_size, sentence_length_source))
     y = nn.Variable((batch_size, sentence_length_target))
     
-    enc_input = TimeDistributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')
-    dec_input = TimeDistributed(PF.embed)(y, vocab_size_target, embedding_size, name='dec_embeddings')
+    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')
+    dec_input = time_distributed(PF.embed)(y, vocab_size_target, embedding_size, name='dec_embeddings')
 
     # encoder
-    output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True, name='encoder')
+    with nn.parameter_scope('encoder'):
+        output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True)
 
     # decoder
     output = LSTMDecoder(dec_input, initial_state=(c, h), return_sequences=True, name='decoder')
-    output = TimeDistributed(PF.affine)(output, vocab_size_target, name='output')
+    output = time_distributed(PF.affine)(output, vocab_size_target, name='output')
 
     t = F.reshape(F.slice(y), (batch_size, sentence_length_target, 1))
 
-    entropy = TimeDistributedSoftmaxCrossEntropy(output, t)
+    entropy = time_distributed_softmax_cross_entropy(output, t)
 
     mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
     count = F.sum(mask, axis=1)
