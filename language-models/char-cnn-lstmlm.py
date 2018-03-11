@@ -76,7 +76,9 @@ filster_sizes = [1, 2, 3, 4, 5, 6, 7]
 
 def build_model(get_embeddings=False):
     x = nn.Variable((batch_size, sentence_length, word_length))
-    h = PF.embed(x, char_vocab_size, char_embedding_dim)
+
+    with nn.parameter_scope('char_embedding'):
+        h = PF.embed(x, char_vocab_size, char_embedding_dim)
     h = F.transpose(h, (0, 3, 1, 2))
     output = []
     for f, f_size in zip(filters, filster_sizes):
@@ -85,13 +87,16 @@ def build_model(get_embeddings=False):
         output.append(_h)
     h = F.concatenate(*output, axis=1)
     h = F.transpose(h, (0, 2, 1, 3))
+
     embeddings = F.reshape(h, (batch_size, sentence_length, sum(filters)))
 
     if get_embeddings:
         return x, embeddings
 
-    h = time_distributed(highway)(embeddings, name='highway1')
-    h = time_distributed(highway)(h, name='highway2')
+    with nn.parameter_scope('highway1'):
+        h = time_distributed(highway)(embeddings)
+    with nn.parameter_scope('highway2'):
+        h = time_distributed(highway)(h)
     with nn.parameter_scope('lstm1'):
         h = lstm(h, lstm_size, return_sequences=True)
     with nn.parameter_scope('lstm2'):
