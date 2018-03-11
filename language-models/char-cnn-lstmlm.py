@@ -18,10 +18,10 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from layers import lstm
-from layers import Highway
-from layers import TimeDistributed
-from layers import TimeDistributedSoftmaxCrossEntropy
+from parametric_functions import lstm
+from parametric_functions import highway
+from functions import time_distributed
+from functions import time_distributed_softmax_cross_entropy
 
 """cuda setting"""
 from nnabla.contrib.context import extension_context
@@ -90,20 +90,20 @@ def build_model(get_embeddings=False):
     if get_embeddings:
         return x, embeddings
 
-    h = TimeDistributed(Highway)(embeddings, name='highway1')
-    h = TimeDistributed(Highway)(h, name='highway2')
+    h = time_distributed(highway)(embeddings, name='highway1')
+    h = time_distributed(highway)(h, name='highway2')
     with nn.parameter_scope('lstm1'):
         h = lstm(h, lstm_size, return_sequences=True)
     with nn.parameter_scope('lstm2'):
         h = lstm(h, lstm_size, return_sequences=True)
     with nn.parameter_scope('hidden'):
-        h = TimeDistributed(PF.affine)(h, lstm_size)
+        h = time_distributed(PF.affine)(h, lstm_size)
     with nn.parameter_scope('output'):
-        y = TimeDistributed(PF.affine)(h, word_vocab_size)
+        y = time_distributed(PF.affine)(h, word_vocab_size)
     t = nn.Variable((batch_size, sentence_length, 1))
 
     mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
-    entropy = TimeDistributedSoftmaxCrossEntropy(y, t) * mask
+    entropy = time_distributed_softmax_cross_entropy(y, t) * mask
     count = F.sum(mask, axis=1)
     loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
     return x, t, loss

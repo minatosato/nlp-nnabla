@@ -114,45 +114,24 @@ def lstm(inputs, units, initial_state=None, return_sequences=False, return_state
         return ret
 
 
-def Highway(x, name='highway'):
+@PF.parametric_function_api('highway')
+def highway(x, fix_parameters=False):
     '''
     A densely connected highway network layer
     Args:
         x (nnabla.Variable): A shape of [B, units]
+        fix_parameters (bool): Fix parameters (Set need_grad=False).
     Returns:
         nn.Variable: A shape [B, units].
     '''
     batch_size, in_out_size = x.shape
 
-    with nn.parameter_scope(name):
-        with nn.parameter_scope('plain'):
-            out_plain = F.relu(PF.affine(x, in_out_size))
-        with nn.parameter_scope('transform'):
-            out_transform = F.sigmoid(PF.affine(x, in_out_size))
+
+    with nn.parameter_scope('plain'):
+        out_plain = F.relu(PF.affine(x, in_out_size, fix_parameters=fix_parameters))
+    with nn.parameter_scope('transform'):
+        out_transform = F.sigmoid(PF.affine(x, in_out_size, fix_parameters=fix_parameters))
     y = out_plain * out_transform + x * (1 - out_transform)
     return y
 
-def TimeDistributed(func):
-    def TimeDistributedFunc(x, *args, **kwargs):
-        ret = []
-        batch_size = x.shape[0]
-        for x_ in F.split(x, axis=1):
-            value = func(x_, *args, **kwargs)
-            _, output_dim = value.shape
-            ret.append(F.reshape(value, (batch_size, 1, output_dim)))
-        return F.concatenate(*ret, axis=1)
-    return TimeDistributedFunc
 
-def TimeDistributedSoftmaxCrossEntropy(y_pred, y_true):
-    '''
-    A time distributed softmax crossentropy
-    Args:
-        y_pred (nnabla.Variable): A shape of [B, SentenceLength, O]. # one-hot
-        y_true (nnabla.Variable): A shape of [B, SentenceLength, 1]. # index
-    Returns:
-        nn.Variable: A shape [B, SentenceLength].
-    '''
-    ret = []
-    for y_p, y_t in zip(F.split(y_pred, axis=1), F.split(y_true, axis=1)):
-        ret.append(F.softmax_cross_entropy(y_p, y_t))
-    return F.concatenate(*ret)

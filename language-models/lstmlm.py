@@ -18,9 +18,9 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from layers import lstm
-from layers import TimeDistributed
-from layers import TimeDistributedSoftmaxCrossEntropy
+from parametric_functions import lstm
+from functions import time_distributed
+from functions import time_distributed_softmax_cross_entropy
 
 """cuda setting"""
 from nnabla.contrib.context import extension_context
@@ -72,12 +72,12 @@ with nn.parameter_scope('embedding'):
 with nn.parameter_scope('lstm1'):
     h = lstm(h, hidden_size, return_sequences=True)
 with nn.parameter_scope('hidden'):
-    h = TimeDistributed(PF.affine)(h, hidden_size)
+    h = time_distributed(PF.affine)(h, hidden_size)
 with nn.parameter_scope('output'):
-    y = TimeDistributed(PF.affine)(h, vocab_size)
+    y = time_distributed(PF.affine)(h, vocab_size)
 
 mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
-entropy = TimeDistributedSoftmaxCrossEntropy(y, t) * mask
+entropy = time_distributed_softmax_cross_entropy(y, t) * mask
 count = F.sum(mask, axis=1)
 loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
 
