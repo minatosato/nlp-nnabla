@@ -7,6 +7,7 @@
 #
 
 import numpy as np
+import os
 
 w2i = {}
 i2w = {}
@@ -86,7 +87,11 @@ def with_padding(sequences, padding_type='post', max_sequence_length=None):
 
     return np.array(list(map(_with_padding, sequences)), dtype=np.int32)
 
-
-
-
+ptb_url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.{0}.txt'
+types = ['train', 'valid', 'test']
+ptb_urls = map(lambda x: ptb_url.format(x), types)
+os.makedirs('./ptb/', exist_ok=True)
+for _url, _type in zip(ptb_urls, types):
+    if not os.path.exists('./ptb/' + _type + '.txt'):
+        os.system('wget -O ' + './ptb/' + _type + '.txt ' + _url)
 
