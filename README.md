@@ -2,9 +2,8 @@
 Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
 ## Test environment
-- NNabla v0.9.7
-- Numpy v1.14.0
-- tqdm v4.19.5
+- Python 3.6.6
+- NNabla v1.0.8
 
 ## New functions (different from the NNabla v0.9.7)
 ### Parametric functions

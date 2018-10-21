@@ -23,8 +23,8 @@ from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 
 """cuda setting"""
-from nnabla.contrib.context import extension_context
-ctx = extension_context('cuda.cudnn', device_id=0)
+from nnabla.ext_utils import get_extension_context
+ctx = get_extension_context('cudnn', device_id=1)
 nn.set_default_context(ctx)
 """"""
 
@@ -94,17 +94,22 @@ monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1
 
 for epoch in range(max_epoch):
     train_loss_set = []
-    for i in tqdm(range(num_train_batch)):
+    progress = tqdm(total=train_data_iter.size//batch_size)
+    for i in range(num_train_batch):
         x_batch, y_batch = train_data_iter.next()
         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
 
         x.d, t.d = x_batch, y_batch
 
-        loss.forward(clear_no_need_grad=True)
-        train_loss_set.append(loss.d.copy())
         solver.zero_grad()
-        loss.backward(clear_buffer=True)
+        loss.forward()
+        train_loss_set.append(loss.d.copy())
+        loss.backward()
         solver.update()
+
+        progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
+        progress.update(1)
+    progress.close()
 
     valid_loss_set = []
     for i in range(num_valid_batch):
