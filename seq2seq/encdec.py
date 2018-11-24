@@ -24,11 +24,19 @@ from parametric_functions import lstm_cell
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 
-"""cuda setting"""
-from nnabla.ext_utils import get_extension_context
-ctx = get_extension_context('cudnn', device_id=1)
-nn.set_default_context(ctx)
-""""""
+import argparse
+parser = argparse.ArgumentParser(description='Encoder-decoder model training.')
+parser.add_argument('--context', '-c', type=str,
+                    default='cpu', help='You can choose cpu or cudnn.')
+parser.add_argument('--device', '-d', type=int,
+                    default=0, help='You can choose the device id when you use cudnn.')
+args = parser.parse_args()
+
+if args.context == 'cudnn':
+    from nnabla.ext_utils import get_extension_context
+    ctx = get_extension_context('cudnn', device_id=args.device)
+    nn.set_default_context(ctx)
+
 # nn.load_parameters('encdec_best.h5')
 
 from utils import load_data
@@ -231,11 +239,11 @@ for epoch in range(max_epoch):
     monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
     monitor_perplexity_dev.add(epoch+1, np.e**np.mean(dev_loss_set))
 
-    # dev_loss = np.e**np.mean(dev_loss_set)
-    # if best_dev_loss > dev_loss:
-    #     best_dev_loss = dev_loss
-    #     print('best dev loss updated! {}'.format(dev_loss))
-    #     nn.save_parameters('encdec_best.h5')
+    dev_loss = np.e**np.mean(dev_loss_set)
+    if best_dev_loss > dev_loss:
+        best_dev_loss = dev_loss
+        print('best dev loss updated! {}'.format(dev_loss))
+        nn.save_parameters('encdec_best.h5')
 
 
 

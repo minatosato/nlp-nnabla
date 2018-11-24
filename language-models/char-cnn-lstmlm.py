@@ -23,16 +23,24 @@ from parametric_functions import highway
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 
-"""cuda setting"""
-from nnabla.ext_utils import get_extension_context
-ctx = get_extension_context('cudnn', device_id=1)
-nn.set_default_context(ctx)
-""""""
-
 from utils import load_data
 from utils import wordseq2charseq
 from utils import w2i, i2w, c2i, i2c, word_length
 from utils import with_padding
+
+import argparse
+parser = argparse.ArgumentParser(description='Encoder-decoder model training.')
+parser.add_argument('--context', '-c', type=str,
+                    default='cpu', help='You can choose cpu or cudnn.')
+parser.add_argument('--device', '-d', type=int,
+                    default=0, help='You can choose the device id when you use cudnn.')
+args = parser.parse_args()
+
+if args.context == 'cudnn':
+    from nnabla.ext_utils import get_extension_context
+    ctx = get_extension_context('cudnn', device_id=args.device)
+    nn.set_default_context(ctx)
+
 
 train_data = load_data('./ptb/train.txt')
 train_data = with_padding(train_data, padding_type='post')

@@ -2,8 +2,8 @@
 Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
 ## Test environment
-- Python 3.6.6
-- NNabla v1.0.8
+- Python 3.6.7
+- NNabla v1.0.9
 
 ## New functions (different from the NNabla v0.9.7)
 ### Parametric functions
@@ -30,8 +30,13 @@ To start training of the model:
 
 ```bash
 cd language-models
-ipython
-run char-cnn-lstm.py
+python char-cnn-lstm.py
+```
+
+If you can use cudnn,
+
+```bash
+python char-cnn-lstm.py -c cudnn
 ```
 
 After training, you can get the similar words to the query word:
