@@ -73,15 +73,19 @@ def load_dev_func(index):
 train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size, shuffle=True, with_file_cache=False)
 dev_data_iter = data_iterator_simple(load_dev_func, len(x_test), batch_size, shuffle=True, with_file_cache=False)
 
+def global_average_pooling_1d(x, mask):
+    count = F.sum(mask, axis=1)
+    global_average_pooled = F.sum(h, axis=1) / count
+    return global_average_pooled
+
 x = nn.Variable((batch_size, max_len))
 t = nn.Variable((batch_size, 1))
 input_mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
 with nn.parameter_scope('embedding'):
     h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * input_mask
-count = F.sum(input_mask, axis=1)
-global_average_pooled = F.sum(h, axis=1) / count
+h = global_average_pooling_1d(h, input_mask)
 with nn.parameter_scope('output'):
-    y = F.sigmoid(PF.affine(global_average_pooled, 1))
+    y = F.sigmoid(PF.affine(h, 1))
 
 accuracy = F.mean(F.equal(F.round(y), t))
 loss = F.mean(F.binary_cross_entropy(y, t))
@@ -101,16 +105,19 @@ best_dev_loss = 9999
 
 for epoch in range(max_epoch):
     train_loss_set = []
+    train_acc_set = []
     progress = tqdm(total=train_data_iter.size//batch_size)
     for i in range(num_train_batch):
         x.d, t.d = train_data_iter.next()
         loss.forward()
+        accuracy.forward()
         solver.zero_grad()
         loss.backward()
         solver.update()
         train_loss_set.append(loss.d.copy())
+        train_acc_set.append(accuracy.d.copy())
 
-        progress.set_description(f"epoch: {epoch+1}, train binarys cross entropy: {np.mean(train_loss_set):.5f}")
+        progress.set_description(f"epoch: {epoch+1}, train cross entropy: {np.mean(train_loss_set):.5f}, train accuracy: {np.mean(train_acc_set):.5f}")
         progress.update(1)
     progress.close()
 
