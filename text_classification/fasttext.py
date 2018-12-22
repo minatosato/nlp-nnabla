@@ -148,11 +148,14 @@ for epoch in range(max_epoch):
     progress.close()
 
     dev_loss_set = []
+    dev_acc_set = []
     for i in range(num_dev_batch):
         x.d, t.d = train_data_iter.next()
         loss.forward()
+        accuracy.forward()
         dev_loss_set.append(loss.d.copy())
-
+        dev_acc_set.append(accuracy.d.copy())
+    print(f"epoch: {epoch+1}, test accuracy: {np.mean(dev_acc_set):.5f}")
     ce_train.add(epoch+1, train_loss_set)
     ce_dev.add(epoch+1, dev_loss_set)
 
