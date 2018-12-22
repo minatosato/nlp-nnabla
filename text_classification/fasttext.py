@@ -6,6 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+"""
+This is implementation of fasttext with bigram features.
+see [Bag of Tricks for Efficient Text Classification](https://arxiv.org/abs/1607.01759)
+"""
+
 import numpy as np
 
 import nnabla as nn
@@ -48,18 +53,42 @@ def load_imdb():
 
 x_train, x_test, y_train, y_test = load_imdb()
 
+def get_bigram(sentence):
+    return list(zip(sentence[:len(sentence)-1], sentence[1:]))
 
 max_len: int = 400
 batch_size: int = 128
-embedding_size: int = 128
+embedding_size: int = 50
 max_epoch: int = 5
+vocab_size: int = max(max(map(lambda x: max(x), x_train)),
+                      max(map(lambda x: max(x), x_test))) + 1
+
+bigram_dict: dict = dict()
+bigram_index = vocab_size
+
+print("making bigram dictionary...")
+for sentence in tqdm(x_train):
+    for bigram in set(get_bigram(sentence)):
+        if bigram not in bigram_dict:
+            bigram_dict[bigram] = bigram_index
+            bigram_index += 1
+
+vocab_size = bigram_index + 1
+    
+print("adding bigram to dataset..")
+for i, sentence in enumerate(tqdm(x_train)):
+    for bigram in get_bigram(sentence):
+        if bigram in bigram_dict:
+            x_train[i].append(bigram_dict[bigram])
+for i, sentence in enumerate(tqdm(x_test)):
+    for bigram in get_bigram(sentence):
+        if bigram in bigram_dict:
+            x_test[i].append(bigram_dict[bigram])
 
 x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
 x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)
 y_train = y_train[:, None]
 y_test = y_test[:, None]
-
-vocab_size = max(x_train.max(), x_test.max())
 
 num_train_batch = len(x_train)//batch_size
 num_dev_batch = len(x_test)//batch_size
@@ -91,7 +120,6 @@ accuracy = F.mean(F.equal(F.round(y), t))
 loss = F.mean(F.binary_cross_entropy(y, t))
 
 # Create solver.
-# solver = S.Momentum(1e-2, momentum=0.9)
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
@@ -100,8 +128,6 @@ from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
 monitor = Monitor('./tmp-fasttext')
 ce_train = MonitorSeries('ce_train', monitor, interval=1)
 ce_dev = MonitorSeries('ce_dev', monitor, interval=1)
-
-best_dev_loss = 9999
 
 for epoch in range(max_epoch):
     train_loss_set = []
