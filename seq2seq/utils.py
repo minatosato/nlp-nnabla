@@ -16,10 +16,10 @@ def load_data(dirname, lang):
 
     w2i['pad'] = 0
     i2w[0] = 'pad'
-    # w2i['<bos>'] = 1
-    # i2w[1] = '<bos>'
-    w2i['<eos>'] = 1
-    i2w[1] = '<eos>'
+    w2i['<bos>'] = 1
+    i2w[1] = '<bos>'
+    w2i['<eos>'] = 2
+    i2w[2] = '<eos>'
 
     def _load_data(filename):
         with open(filename) as f:

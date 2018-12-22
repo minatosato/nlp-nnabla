@@ -11,6 +11,10 @@ import nnabla.functions as F
 import nnabla.parametric_functions as PF
 import numpy as np
 
+from typing import Optional
+
+from functions import time_distributed
+
 
 @PF.parametric_function_api('simple_rnn')
 def simple_rnn(inputs, units, return_sequences=False, fix_parameters=False):
@@ -133,5 +137,72 @@ def highway(x, fix_parameters=False):
         out_transform = F.sigmoid(PF.affine(x, in_out_size, fix_parameters=fix_parameters))
     y = out_plain * out_transform + x * (1 - out_transform)
     return y
+
+@PF.parametric_function_api('global_attention')
+def global_attention(inputs:nn.Variable, memory:nn.Variable, mask:Optional[nn.Variable]=None, score:str='general', fix_parameters=False):
+    '''
+    A global attention layer
+    Args:
+        inputs (nnabla.Variable): A shape of [B, sen_len_query, units]
+        memory (nnabla.Variable): A shape of [B, sen_len_memory, units]
+        mask (nnabla.Variable): A shape of [B, sen_len_query, sen_len_memory]
+        score (str): A kind of score functions for calculating attention weights.
+                     'general', 'dot' or 'concat'.
+                     see [Effective Approaches to Attention-based Neural Machine Translation](http://aclweb.org/anthology/D15-1166)
+        fix_parameters (bool): Fix parameters (Set need_grad=False).
+    Returns:
+        nn.Variable: A shape [B, units].
+    '''
+    batch_size, sentence_length_query, embedding_size =  inputs.shape
+    _, sentence_length_memory, _ = memory.shape
+    q = inputs
+    # -> (batch_size, sentence_length_query, embedding_size)
+    k = memory
+    # -> (batch_size, sentence_length_memory, embedding_size)
+    v = memory
+    # -> (batch_size, sentence_length_memory, embedding_size)
+    
+    if score == 'dot':
+        logit = F.batch_matmul(q, k, transpose_b=True)
+        # -> (batch_size, sentence_length_query, sentence_length_memory)
+    elif score == 'general':
+        with nn.parameter_scope('Wa'):
+            wa = time_distributed(PF.affine)(q, embedding_size, with_bias=False)
+            # -> (batch_size, sentence_length_query, embeding_size)
+        logit = F.batch_matmul(wa, k, transpose_b=True)
+        # -> (batch_size, sentence_length_query, sentence_length_memory)
+    elif score == 'concat':
+        a_list = []
+        print(q)
+        for _q in F.split(q, axis=1):
+            print(_q)
+            _q = F.reshape(_q, shape=(batch_size, 1, embedding_size))
+            _q = F.broadcast(_q, shape=(batch_size, sentence_length_memory, embedding_size))
+            concat = F.concatenate(_q, k, axis=2)
+            # -> (batch_size, sentence_length_memory, embedding_size * 2)
+            with nn.parameter_scope('Wa'):
+                a = time_distributed(PF.affine)(concat, 1, with_bias=False)
+                # -> (batch_size, sentence_length_memory, 1)
+                a_list.append(a)
+        
+        logit = F.concatenate(*a_list, axis=2)
+        # -> (batch_size, sentence_length_memory, sentence_length_query)
+        logit = F.transpose(logit, axes=(0, 2, 1))
+        # -> (batch_size, sentence_length_query, sentence_length_memory)
+    
+    # maskのshapeは-> (batch_size, sentence_length_query, sentence_length_memory)である
+    if mask is not None:
+        logit += (F.constant(1, shape=mask.shape) - mask) * F.constant(np.finfo(np.float32).min, shape=mask.shape)
+
+
+    attention_weights = F.softmax(logit, axis=2)
+    # -> (batch_size, sentence_length_query, sentence_length_memory)
+
+    attention_output = F.batch_matmul(attention_weights, v)
+    # -> (batch_size, sentence_length_query, embedding_size)
+
+    return attention_output
+
+
 
 

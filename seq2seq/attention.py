@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 from parametric_functions import lstm
 from parametric_functions import lstm_cell
+from parametric_functions import global_attention
 
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
@@ -37,7 +38,7 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-# nn.load_parameters('encdec_best.h5')
+# nn.load_parameters('new_attention.h5')
 
 from utils import load_data
 from utils import with_padding
@@ -58,7 +59,7 @@ sentence_length_source = train_source.shape[1]
 sentence_length_target = train_target.shape[1]
 embedding_size = 1024
 hidden = 1024
-batch_size = 256
+batch_size = 64
 max_epoch = 500
 
 num_train_batch = len(train_source)//batch_size
@@ -90,108 +91,33 @@ dev_data_iter = data_iterator_simple(load_dev_func, len(dev_source), batch_size,
 #     h = F.max(h, axis=2)
 #     return h
 
-def GlobalAttention(hs, attention_units):
-    # hs -> (batch_size, sentence_legnth_source, embedding_size)
-    hs = time_distributed(PF.affine)(hs, attention_units, with_bias=False, name='Wahs')
-    # -> (batch_size, sentence_legnth_source, attention_units)
+# def GlobalAttention(hs, attention_units):
+#     # hs -> (batch_size, sentence_legnth_source, embedding_size)
+#     hs = time_distributed(PF.affine)(hs, attention_units, with_bias=False, name='Wahs')
+#     # -> (batch_size, sentence_legnth_source, attention_units)
 
-    def compute_context(prev_state):
-        batch_size = prev_state.shape[0]
-        ht = PF.affine(prev_state, attention_units, with_bias=False, name='Waht')
-        # -> (batch_size, attention_units)
-        ht = F.reshape(ht, (batch_size, 1, attention_units))
-        # -> (batch_size, 1, attention_units)
-        ht = F.broadcast(ht, (batch_size, sentence_length_source, attention_units))
-        # -> (batch_size, sentence_length_source, attention_units)
+#     def compute_context(prev_state):
+#         batch_size = prev_state.shape[0]
+#         ht = PF.affine(prev_state, attention_units, with_bias=False, name='Waht')
+#         # -> (batch_size, attention_units)
+#         ht = F.reshape(ht, (batch_size, 1, attention_units))
+#         # -> (batch_size, 1, attention_units)
+#         ht = F.broadcast(ht, (batch_size, sentence_length_source, attention_units))
+#         # -> (batch_size, sentence_length_source, attention_units)
 
-        attention = F.tanh(hs + ht)
-        # -> (batch_size, sentence_length_source, attention_units)
-        attention = time_distributed(PF.affine)(attention, 1, with_bias=False, name='attention')
-        # -> (batch_size, sentence_length_source, 1)
-        attention = F.softmax(attention, axis=1)
-        # -> (batch_size, sentence_length_source, 1)
+#         attention = F.tanh(hs + ht)
+#         # -> (batch_size, sentence_length_source, attention_units)
+#         attention = time_distributed(PF.affine)(attention, 1, with_bias=False, name='attention')
+#         # -> (batch_size, sentence_length_source, 1)
+#         attention = F.softmax(attention, axis=1)
+#         # -> (batch_size, sentence_length_source, 1)
 
-        context = F.batch_matmul(hs, attention, transpose_a=True)
-        context = F.reshape(context, (batch_size, attention_units))
+#         context = F.batch_matmul(hs, attention, transpose_a=True)
+#         context = F.reshape(context, (batch_size, attention_units))
 
-        return context
+#         return context
 
-    return compute_context
-
-LSTMEncoder = lstm
-
-def LSTMAttentionDecoder(inputs=None, encoder_output=None, initial_state=None, return_sequences=False, return_state=False, inference_params=None, name='lstm'):
-
-    if inputs is None:
-        assert inference_params is not None, 'if inputs is None, inference_params must not be None.'
-    else:
-        sentence_length = inputs.shape[1]
-
-    assert type(initial_state) is tuple or type(initial_state) is list, \
-           'initial_state must be a typle or a list.'
-    assert len(initial_state) == 2, \
-           'initial_state must have only two states.'
-
-    c0, h0 = initial_state
-
-    assert c0.shape == h0.shape, 'shapes of initial_state must be same.'
-    batch_size, units = c0.shape
-
-    cell = c0
-    hidden = h0
-
-    hs = []
-
-    if inference_params is None:
-        xs = F.split(F.slice(inputs, stop=(batch_size, sentence_length-1, units)), axis=1)
-        pad = nn.Variable.from_numpy_array(np.array([w2i_source['pad']]*batch_size))
-        xs = [PF.embed(pad, vocab_size_source, embedding_size, name='enc_embeddings')] + list(xs)
-
-        compute_context = GlobalAttention(encoder_output, 1024)
-
-        for x in xs:
-            with nn.parameter_scope(name):
-                cell, hidden = lstm_cell(x, cell, hidden)
-                context = compute_context(hidden)
-                h_t = F.tanh(PF.affine(F.concatenate(context, hidden, axis=1), 1024, with_bias=False, name='Wc'))
-            hs.append(h_t)
-    else:
-        assert batch_size == 1, 'batch size of inference mode must be 1.'
-        embed_weight, output_weight, output_bias = inference_params
-        pad = nn.Variable.from_numpy_array(np.array([w2i_source['pad']]*batch_size))
-        x = PF.embed(pad, vocab_size_source, embedding_size, name='enc_embeddings')
-
-        compute_context = GlobalAttention(encoder_output, 1024)
-
-        word_index = 0
-        ret = []
-        i = 0
-        while i2w_target[word_index] != '。' and i < 20:
-            with nn.parameter_scope(name):
-                cell, hidden = lstm_cell(x, cell, hidden)
-                context = compute_context(hidden)
-                h_t = F.tanh(PF.affine(F.concatenate(context, hidden, axis=1), 1024, with_bias=False, name='Wc'))
-            output = F.affine(h_t, output_weight, bias=output_bias)
-            word_index = np.argmax(output.d[0])
-            ret.append(word_index)
-            x = nn.Variable.from_numpy_array(np.array([word_index], dtype=np.int32))
-            x = F.embed(x, embed_weight)
-
-            i+=1
-        return ret
-
-
-    if return_sequences:
-        ret = F.stack(*hs, axis=1)
-    else:
-        ret = hs[-1]
-
-    if return_state:
-        return ret, cell, hidden
-    else:
-        return ret
-
-
+#     return compute_context
 
 def predict(x):
     with nn.auto_forward():
@@ -201,13 +127,34 @@ def predict(x):
 
         # encoder
         with nn.parameter_scope('encoder'):
-            output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True)
+            enc_output, c, h = lstm(enc_input, hidden, return_sequences=True, return_state=True)
+        
+        # decode
+        pad = nn.Variable.from_numpy_array(np.array([w2i_target['<bos>']]))
+        x = PF.embed(pad, vocab_size_target, embedding_size, name='dec_embeddings')
 
-        # decoder
-        params = [nn.get_parameters()['dec_embeddings/embed/W'],
-                  nn.get_parameters()['output/affine/W'],
-                  nn.get_parameters()['output/affine/b']]
-        ret = LSTMAttentionDecoder(encoder_output=output, initial_state=(c, h), inference_params=params, name='decoder')
+        _cell, _hidden = c, h
+
+        word_index = 0
+        ret = []
+        i = 0
+        while i2w_target[word_index] != '。' and i < 20:
+            with nn.parameter_scope('decoder'):
+                with nn.parameter_scope('lstm'):
+                    _cell, _hidden = lstm_cell(x, _cell, _hidden)
+                    q = F.reshape(_hidden, (1, 1, hidden))
+                    attention_output = global_attention(q, enc_output)
+            attention_output = F.reshape(attention_output, (1, hidden))
+            output = F.concatenate(_hidden, attention_output, axis=1)
+            output = PF.affine(output, vocab_size_target, name='output')
+
+            word_index = np.argmax(output.d[0])
+            ret.append(word_index)
+            print(word_index)
+            x = nn.Variable.from_numpy_array(np.array([word_index], dtype=np.int32))
+            x = PF.embed(x, vocab_size_target, embedding_size, name='dec_embeddings')
+
+            i+=1
 
         return ret
 
@@ -230,20 +177,35 @@ def build_model():
     input_mask = F.sign(F.reshape(F.slice(x), (batch_size, sentence_length_source, 1)))
     y = nn.Variable((batch_size, sentence_length_target))
     
-    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')#*input_mask
+    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')*F.sign(F.reshape(x, (batch_size, sentence_length_source, 1)))
     # -> (batch_size, sentence_length_source, embedding_size)
-    dec_input = time_distributed(PF.embed)(y, vocab_size_target, embedding_size, name='dec_embeddings')
+
+    dec_input = F.concatenate(F.constant(w2i_target['<bos>'], shape=(batch_size, 1)),
+                              F.slice(y, stop=(batch_size, sentence_length_target-1)),
+                              axis=1)
+
+    dec_input = time_distributed(PF.embed)(dec_input, vocab_size_target, embedding_size, name='dec_embeddings')
     # -> (batch_size, sentence_length_target, embedding_size)
 
     # encoder
     with nn.parameter_scope('encoder'):
-        output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True)
+        enc_output, c, h = lstm(enc_input, hidden, return_sequences=True, return_state=True)
         # -> (batch_size, sentence_length_source, hidden), (batch_size, hidden), (batch_size, hidden)
 
     # decoder
-    output = LSTMAttentionDecoder(dec_input, output, initial_state=(c, h), return_sequences=True, name='decoder')
-    # -> (batch_size, sentence_length_target, hidden)
-    output = time_distributed(PF.affine)(output, vocab_size_target, name='output')
+    with nn.parameter_scope('decoder'):
+        dec_output = lstm(dec_input, hidden, initial_state=(c, h), return_sequences=True)
+        # -> (batch_size, sentence_length_target, hidden)
+
+    #     attention_output = global_attention(dec_output, enc_output,
+    #                                         mask=F.broadcast(F.reshape(input_mask, shape=(batch_size, 1, sentence_length_source)),
+    #                                                          shape=(batch_size, sentence_length_target, sentence_length_source)),
+    #                                         score='concat')        
+    #     # -> (batch_size, sentence_length_target, hidden)
+
+    # output = F.concatenate(dec_output, attention_output, axis=2)
+
+    output = time_distributed(PF.affine)(dec_output, vocab_size_target, name='output')
     # -> (batch_size, sentence_length_target, vocab_size_target)
 
     t = F.reshape(F.slice(y), (batch_size, sentence_length_target, 1))
@@ -265,8 +227,8 @@ solver.set_parameters(nn.get_parameters())
 
 # Create monitor.
 from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-encdec')
-monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
+monitor = Monitor('./tmp-attention')
+monitor_perplexity_train = MonitorSeries('perplexity_train', monitor, interval=1)
 monitor_perplexity_dev = MonitorSeries('perplexity_dev', monitor, interval=1)
 
 best_dev_loss = 9999
@@ -278,7 +240,7 @@ for epoch in range(max_epoch):
         x.d, y.d = train_data_iter.next()
         loss.forward()
         solver.zero_grad()
-        loss.backward(clear_buffer=True)
+        loss.backward()
         solver.update()
         train_loss_set.append(loss.d.copy())
 
@@ -292,7 +254,7 @@ for epoch in range(max_epoch):
         loss.forward()
         dev_loss_set.append(loss.d.copy())
 
-    monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
+    monitor_perplexity_train.add(epoch+1, np.e**np.mean(train_loss_set))
     monitor_perplexity_dev.add(epoch+1, np.e**np.mean(dev_loss_set))
 
     # dev_loss = np.e**np.mean(dev_loss_set)

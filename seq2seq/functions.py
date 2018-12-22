@@ -15,11 +15,21 @@ def time_distributed(func):
     def time_distributed_func(x, *args, **kwargs):
         ret = []
         batch_size = x.shape[0]
-        for x_ in F.split(x, axis=1):
+        length = x.shape[1]
+        dim = x.shape[2] if x.ndim > 2 else 1
+        if length > 1:
+            xs = F.split(x, axis=1)
+        else:
+            xs = [F.reshape(x, (batch_size, dim))]
+        for x_ in xs:
             value = func(x_, *args, **kwargs)
             _, output_dim = value.shape
             ret.append(F.reshape(value, (batch_size, 1, output_dim)))
-        return F.concatenate(*ret, axis=1)
+        
+        if length > 1:
+            return F.concatenate(*ret, axis=1)
+        else:
+            return ret[0]
     return time_distributed_func
 
 

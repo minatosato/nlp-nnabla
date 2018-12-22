@@ -169,17 +169,24 @@ def predict(x):
 
 def translate(index):
     print('source:')
-    print(' '.join([i2w_source[i] for i in test_source[index]][::-1]).strip(' pad'))
+    src = [i2w_source[i] for i in test_source[index][test_source[index]!=0]][::-1]
+    print(' '.join(src))
     print('target:')
-    print(''.join([i2w_target[i] for i in test_target[index]]).strip('pad'))
+    tgt = [i2w_target[i] for i in test_target[index][test_target[index]!=0]]
+    print(''.join(tgt))
     print('encoder-decoder output:')
-    print(''.join([i2w_target[i] for i in predict(test_source[index])]).strip('pad'))
+    pred = predict(test_source[index])
+    pred = [i2w_target[i] for i in pred]
+    print(''.join(pred))
+    from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+    cc = SmoothingFunction()
+    print(f'BLEU: {sentence_bleu([tgt], pred, smoothing_function=cc.method3)}')
 
 def build_model():
     x = nn.Variable((batch_size, sentence_length_source))
     y = nn.Variable((batch_size, sentence_length_target))
     
-    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')
+    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')*F.sign(F.reshape(x, (batch_size, sentence_length_source, 1)))
     dec_input = time_distributed(PF.embed)(y, vocab_size_target, embedding_size, name='dec_embeddings')
 
     # encoder
