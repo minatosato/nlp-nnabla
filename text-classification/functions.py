@@ -11,6 +11,12 @@ import nnabla.functions as F
 import nnabla.parametric_functions as PF
 import numpy as np
 
+def frobenius(x):
+    return F.mean(F.sum(F.sum(x ** 2, axis=2), axis=1) ** 0.5)
+
+def batch_eye(batch_size, size):
+    return F.broadcast(F.reshape(F.matrix_diag(F.constant(1, shape=(size,))), shape=(1, size, size)), shape=(batch_size, size, size))
+
 def time_distributed(func):
     def time_distributed_func(x, *args, **kwargs):
         ret = []

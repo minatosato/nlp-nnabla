@@ -44,24 +44,27 @@ if not dataset_path.exists():
     import os
     os.system('wget https://s3.amazonaws.com/text-datasets/imdb.npz')
 
-def load_imdb():
+def load_imdb(vocab_size):
+    unk_index = vocab_size - 1
     raw = np.load(dataset_path.as_posix())
     ret = dict()
     for k, v in raw.items():
+        if 'x' in k:
+            for i, sentence in enumerate(v):
+                v[i] = [word if word < unk_index else unk_index for word in sentence]
         ret[k] = v
     return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
-x_train, x_test, y_train, y_test = load_imdb()
+max_len: int = 400
+batch_size: int = 32
+embedding_size: int = 50
+max_epoch: int = 5
+vocab_size: int = 20000
+
+x_train, x_test, y_train, y_test = load_imdb(vocab_size)
 
 def get_bigram(sentence):
     return list(zip(sentence[:len(sentence)-1], sentence[1:]))
-
-max_len: int = 400
-batch_size: int = 128
-embedding_size: int = 50
-max_epoch: int = 5
-vocab_size: int = max(max(map(lambda x: max(x), x_train)),
-                      max(map(lambda x: max(x), x_test))) + 1
 
 bigram_dict: dict = dict()
 bigram_index = vocab_size
@@ -150,7 +153,7 @@ for epoch in range(max_epoch):
     dev_loss_set = []
     dev_acc_set = []
     for i in range(num_dev_batch):
-        x.d, t.d = train_data_iter.next()
+        x.d, t.d = dev_data_iter.next()
         loss.forward()
         accuracy.forward()
         dev_loss_set.append(loss.d.copy())

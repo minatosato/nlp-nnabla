@@ -22,6 +22,8 @@ from tqdm import tqdm
 
 from parametric_functions import lstm
 from functions import time_distributed
+from functions import frobenius
+from functions import batch_eye
 from utils import with_padding
 
 import argparse
@@ -42,25 +44,31 @@ if not dataset_path.exists():
     import os
     os.system('wget https://s3.amazonaws.com/text-datasets/imdb.npz')
 
-def load_imdb():
-    raw = np.load(dataset_path.as_posix())
+def load_imdb(vocab_size):
+    unk_index = vocab_size - 1
+    raw = np.load(dataset_path)
     ret = dict()
     for k, v in raw.items():
+        if 'x' in k:
+            for i, sentence in enumerate(v):
+                v[i] = [word if word < unk_index else unk_index for word in sentence]
         ret[k] = v
     return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
-x_train, x_test, y_train, y_test = load_imdb()
-
-max_len: int = 80
-batch_size: int = 128
+max_len: int = 200
+batch_size: int = 256
 embedding_size: int = 300
 hidden_size: int = 300
 da: int = 350
 r: int = 30
-output_mlp_size: int = 2000
+output_mlp_size: int = 3000
 max_epoch: int = 20
-vocab_size: int = max(max(map(lambda x: max(x), x_train)),
-                      max(map(lambda x: max(x), x_test))) + 1
+vocab_size: int = 20000
+dropout_ratio: float = 0.3
+attention_penalty_coef: float = 0.03
+l2_penalty_coef: float = 1e-4
+
+x_train, x_test, y_train, y_test = load_imdb(vocab_size)
 
 x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
 x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)
@@ -80,30 +88,43 @@ train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size
 dev_data_iter = data_iterator_simple(load_dev_func, len(x_test), batch_size, shuffle=True, with_file_cache=False)
 
 
-x = nn.Variable((batch_size, max_len))
-t = nn.Variable((batch_size, 1))
-mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
-attention_mask = (F.constant(1, shape=mask.shape) - mask) * F.constant(np.finfo(np.float32).min, shape=mask.shape)
-with nn.parameter_scope('embedding'):
-    h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
-h_f = lstm(h,            hidden_size, return_sequences=True, return_state=False)
-h_b = lstm(h[:, ::-1, ], hidden_size, return_sequences=True, return_state=False)
-h = F.concatenate(h_f, h_b, axis=2)
-with nn.parameter_scope('da'):
-    a = F.tanh(time_distributed(PF.affine)(h, da))
-with nn.parameter_scope('r'):
-    a = F.softmax(time_distributed(PF.affine)(a, r) + attention_mask, axis=1)
-m = F.batch_matmul(a, h, transpose_a=True)
-with nn.parameter_scope('output_mlp'):
-    output = F.relu(PF.affine(m, output_mlp_size))
-with nn.parameter_scope('output'):
-    y = F.sigmoid(PF.affine(output, 1))
+def build_self_attention_model(train=True):
+    x = nn.Variable((batch_size, max_len))
+    t = nn.Variable((batch_size, 1))
+    mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
+    attention_mask = (F.constant(1, shape=mask.shape) - mask) * F.constant(np.finfo(np.float32).min, shape=mask.shape)
+    with nn.parameter_scope('embedding'):
+        h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
+    with nn.parameter_scope('forward'):
+        h_f = lstm(h,            hidden_size, return_sequences=True, return_state=False)
+    with nn.parameter_scope('backward'):
+        h_b = lstm(h[:, ::-1, ], hidden_size, return_sequences=True, return_state=False)[:, ::-1, ]
+    h = F.concatenate(h_f, h_b, axis=2)
+    if train:
+        h = F.dropout(h, p=dropout_ratio)
+    with nn.parameter_scope('da'):
+        a = F.tanh(time_distributed(PF.affine)(h, da))
+        if train:
+            a = F.dropout(a, p=dropout_ratio)
+    with nn.parameter_scope('r'):
+        a = time_distributed(PF.affine)(a, r)
+        if train:
+            a = F.dropout(a, p=dropout_ratio)
+        a = F.softmax(a + attention_mask, axis=1)
+    m = F.batch_matmul(a, h, transpose_a=True)
+    with nn.parameter_scope('output_mlp'):
+        output = F.relu(PF.affine(m, output_mlp_size))
+        if train:
+            output = F.dropout(output, p=dropout_ratio)
+    with nn.parameter_scope('output'):
+        y = F.sigmoid(PF.affine(output, 1))
 
-accuracy = F.mean(F.equal(F.round(y), t))
-penalty = F.batch_matmul(a, a, transpose_a=True) - F.broadcast(F.reshape(F.matrix_diag(F.constant(1, shape=(r,))), shape=(1, r, r)), shape=(batch_size, r, r))
-loss = F.mean(F.binary_cross_entropy(y, t)) + F.mean(F.sum(F.sum(penalty ** 2, axis=2), axis=1))
+    accuracy = F.mean(F.equal(F.round(y), t))
+    loss = F.mean(F.binary_cross_entropy(y, t)) + attention_penalty_coef * frobenius(F.batch_matmul(a, a, transpose_a=True) - batch_eye(batch_size, r))
+    return x, y, t, accuracy, loss
 
 # Create solver.
+x, y, t, accuracy, loss = build_self_attention_model(train=True)
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
@@ -117,12 +138,14 @@ for epoch in range(max_epoch):
     train_loss_set = []
     train_acc_set = []
     progress = tqdm(total=train_data_iter.size//batch_size)
+    x, y, t, accuracy, loss = build_self_attention_model(train=True)
     for i in range(num_train_batch):
         x.d, t.d = train_data_iter.next()
         loss.forward()
         accuracy.forward()
         solver.zero_grad()
         loss.backward()
+        solver.weight_decay(l2_penalty_coef)
         solver.update()
         train_loss_set.append(loss.d.copy())
         train_acc_set.append(accuracy.d.copy())
@@ -133,8 +156,9 @@ for epoch in range(max_epoch):
 
     dev_loss_set = []
     dev_acc_set = []
+    x, y, t, accuracy, loss = build_self_attention_model(train=False)
     for i in range(num_dev_batch):
-        x.d, t.d = train_data_iter.next()
+        x.d, t.d = dev_data_iter.next()
         loss.forward()
         accuracy.forward()
         dev_loss_set.append(loss.d.copy())
