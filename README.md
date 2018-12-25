@@ -3,7 +3,7 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
 ## Test environment
 - Python 3.6.7
-- NNabla v1.0.9
+- NNabla v1.0.10
 
 ## New functions (different from the NNabla v0.9.7)
 ### Parametric functions
@@ -73,19 +73,6 @@ ipython
 run attention.py
 ```
 
-You can use pre-trained attention model:
-
-```bash
-cd seq2seq
-./download.sh
-ipython
-run attention.py
-Ctrl+C (interrupt)
-
-!wget https://github.com/satopirka/nlp-nnabla/releases/download/v0.0.1-alpha/attention_en2ja.h5
-nn.load_parameters('attention_en2ja.h5')
-```
-
 And you can try to translate Japanese sentence into English by the model like below:
 
 ```python
@@ -97,6 +84,10 @@ Out[00]: '彼女の顔をまともに見ることが出来なかった。'
 In [00]: translate("how far is it to the station ?")
 Out[00]: '駅までどのくらいありますか。'
 ```
+
+### Text classifiers
+- fastText ([`fasttext.py`](https://github.com/satopirka/nlp-nnabla/blob/master/text-classification/fasttext.py))
+- Self attention ([`self_attention.py`](https://github.com/satopirka/nlp-nnabla/blob/master/text-classification/self_attention.py))
 
 ## Future work
 - Skip-gram model
