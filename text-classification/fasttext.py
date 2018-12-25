@@ -24,6 +24,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from functions import time_distributed
+from utils import load_imdb
 from utils import with_padding
 
 import argparse
@@ -38,22 +39,6 @@ if args.context == 'cudnn':
     from nnabla.ext_utils import get_extension_context
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
-dataset_path = Path('./imdb.npz')
-
-if not dataset_path.exists():
-    import os
-    os.system('wget https://s3.amazonaws.com/text-datasets/imdb.npz')
-
-def load_imdb(vocab_size):
-    unk_index = vocab_size - 1
-    raw = np.load(dataset_path.as_posix())
-    ret = dict()
-    for k, v in raw.items():
-        if 'x' in k:
-            for i, sentence in enumerate(v):
-                v[i] = [word if word < unk_index else unk_index for word in sentence]
-        ret[k] = v
-    return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
 max_len: int = 400
 batch_size: int = 32

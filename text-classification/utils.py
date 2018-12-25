@@ -8,6 +8,24 @@
 
 import numpy as np
 from typing import Optional
+from pathlib import Path
+
+def load_imdb(vocab_size):
+    dataset_path = Path('./imdb.npz')
+
+    if not dataset_path.exists():
+        import os
+        os.system('wget https://s3.amazonaws.com/text-datasets/imdb.npz')
+
+    unk_index = vocab_size - 1
+    raw = np.load(dataset_path)
+    ret = dict()
+    for k, v in raw.items():
+        if 'x' in k:
+            for i, sentence in enumerate(v):
+                v[i] = [word if word < unk_index else unk_index for word in sentence]
+        ret[k] = v
+    return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
 def with_padding(sequences, padding_type:str='post', max_sequence_length:Optional[int]=None) -> np.ndarray:
     if max_sequence_length is None:
