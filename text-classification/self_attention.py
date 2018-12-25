@@ -6,8 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-
-
 import numpy as np
 
 import nnabla as nn
@@ -55,8 +53,8 @@ def load_imdb(vocab_size):
         ret[k] = v
     return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
-max_len: int = 200
-batch_size: int = 256
+max_len: int = 400
+batch_size: int = 128
 embedding_size: int = 300
 hidden_size: int = 300
 da: int = 350
