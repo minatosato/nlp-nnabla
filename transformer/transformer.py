@@ -6,24 +6,32 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-import numpy as np
-
 import nnabla as nn
 import nnabla.functions as F
 import nnabla.parametric_functions as PF
+import nnabla.initializer as I
 import nnabla.solvers as S
 
 from nnabla.utils.data_iterator import data_iterator_simple
 
-from pathlib import Path
-from tqdm import tqdm
+import numpy as np
 
-from parametric_functions import lstm
-from functions import time_distributed
-from functions import frobenius
-from functions import batch_eye
-from utils import load_imdb
+from typing import Optional
+
 from utils import with_padding
+from utils import load_imdb
+
+from functions import time_distributed
+from functions import residual_normalization_wrapper
+from functions import position_encoding
+from functions import multihead_self_attention
+from functions import positionwise_feed_forward
+from functions import token_embedding
+
+from functions import get_mask
+from functions import get_attention_logit_mask
+
+from tqdm import tqdm
 
 import argparse
 parser = argparse.ArgumentParser(description='Encoder-decoder model training.')
@@ -38,20 +46,22 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-max_len: int = 400
-batch_size: int = 128
-embedding_size: int = 300
-hidden_size: int = 300
-da: int = 350
-r: int = 30
-output_mlp_size: int = 3000
-max_epoch: int = 20
-vocab_size: int = 20000
-dropout_ratio: float = 0.3
-attention_penalty_coef: float = 0.03
-l2_penalty_coef: float = 1e-4
+
+
+batch_size = 64
+max_len = 400
+embedding_size = 128
+vocab_size = 20000
+head_num = 8
+hopping_num = 2
+max_epoch = 20
+l2_penalty_coef = 1e-4
 
 x_train, x_test, y_train, y_test = load_imdb(vocab_size)
+for i, sentence in enumerate(tqdm(x_train)):
+    x_train[i] = [vocab_size] + sentence
+for i, sentence in enumerate(tqdm(x_test)):
+    x_test[i] = [vocab_size] + sentence
 
 x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
 x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)
@@ -70,50 +80,43 @@ def load_dev_func(index):
 train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size, shuffle=True, with_file_cache=False)
 dev_data_iter = data_iterator_simple(load_dev_func, len(x_test), batch_size, shuffle=True, with_file_cache=False)
 
+vocab_size += 1
 
-def build_self_attention_model(train=True):
+def transformer(train=True, droput_ratio=0.1):
     x = nn.Variable((batch_size, max_len))
     t = nn.Variable((batch_size, 1))
-    mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
-    attention_mask = (F.constant(1, shape=mask.shape) - mask) * F.constant(np.finfo(np.float32).min, shape=mask.shape)
-    with nn.parameter_scope('embedding'):
-        h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
-    with nn.parameter_scope('forward'):
-        h_f = lstm(h,            hidden_size, return_sequences=True, return_state=False)
-    with nn.parameter_scope('backward'):
-        h_b = lstm(h[:, ::-1, ], hidden_size, return_sequences=True, return_state=False)[:, ::-1, ]
-    h = F.concatenate(h_f, h_b, axis=2)
+    mask = get_mask(x)
+    with nn.parameter_scope('embedding_layer'):
+        # h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
+        h = token_embedding(x, vocab_size, embedding_size)
+    h = position_encoding(h)
+
     if train:
-        h = F.dropout(h, p=dropout_ratio)
-    with nn.parameter_scope('da'):
-        a = F.tanh(time_distributed(PF.affine)(h, da))
-        if train:
-            a = F.dropout(a, p=dropout_ratio)
-    with nn.parameter_scope('r'):
-        a = time_distributed(PF.affine)(a, r)
-        if train:
-            a = F.dropout(a, p=dropout_ratio)
-        a = F.softmax(a + attention_mask, axis=1)
-    m = F.batch_matmul(a, h, transpose_a=True)
-    with nn.parameter_scope('output_mlp'):
-        output = F.relu(PF.affine(m, output_mlp_size))
-        if train:
-            output = F.dropout(output, p=dropout_ratio)
-    with nn.parameter_scope('output'):
-        y = F.sigmoid(PF.affine(output, 1))
+        h = F.dropout(h, p=droput_ratio)
+
+    for i in range(hopping_num):
+        with nn.parameter_scope(f'encoder_hopping_{i}'):
+            h = residual_normalization_wrapper(multihead_self_attention)(h, head_num, mask=mask, train=train, dropout_ratio=droput_ratio)
+            h = residual_normalization_wrapper(positionwise_feed_forward)(h, train=train, dropout_ratio=droput_ratio)
+        
+    with nn.parameter_scope('output_layer'):
+        y = F.sigmoid(PF.affine(h[:, 0, :], 1))
+
 
     accuracy = F.mean(F.equal(F.round(y), t))
-    loss = F.mean(F.binary_cross_entropy(y, t)) + attention_penalty_coef * frobenius(F.batch_matmul(a, a, transpose_a=True) - batch_eye(batch_size, r))
+    loss = F.mean(F.binary_cross_entropy(y, t))
+
     return x, y, t, accuracy, loss
 
+x, y, t, accuracy, loss = transformer(train=True, droput_ratio=0.1)
+
 # Create solver.
-x, y, t, accuracy, loss = build_self_attention_model(train=True)
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
 # Create monitor.
 from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-self_attention')
+monitor = Monitor('./tmp-transformer')
 ce_train = MonitorSeries('ce_train', monitor, interval=1)
 ce_dev = MonitorSeries('ce_dev', monitor, interval=1)
 
@@ -121,7 +124,7 @@ for epoch in range(max_epoch):
     train_loss_set = []
     train_acc_set = []
     progress = tqdm(total=train_data_iter.size//batch_size)
-    x, y, t, accuracy, loss = build_self_attention_model(train=True)
+    x, y, t, accuracy, loss = transformer(train=True, droput_ratio=0.1)
     for i in range(num_train_batch):
         x.d, t.d = train_data_iter.next()
         loss.forward()
@@ -139,7 +142,7 @@ for epoch in range(max_epoch):
 
     dev_loss_set = []
     dev_acc_set = []
-    x, y, t, accuracy, loss = build_self_attention_model(train=False)
+    x, y, t, accuracy, loss = transformer(train=False)
     for i in range(num_dev_batch):
         x.d, t.d = dev_data_iter.next()
         loss.forward()
@@ -149,6 +152,8 @@ for epoch in range(max_epoch):
     print(f"epoch: {epoch+1}, test accuracy: {np.mean(dev_acc_set):.5f}")
     ce_train.add(epoch+1, train_loss_set)
     ce_dev.add(epoch+1, dev_loss_set)
+
+
 
 
 

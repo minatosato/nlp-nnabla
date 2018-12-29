@@ -197,15 +197,15 @@ def build_model():
         dec_output = lstm(dec_input, hidden, initial_state=(c, h), return_sequences=True)
         # -> (batch_size, sentence_length_target, hidden)
 
-    #     attention_output = global_attention(dec_output, enc_output,
-    #                                         mask=F.broadcast(F.reshape(input_mask, shape=(batch_size, 1, sentence_length_source)),
-    #                                                          shape=(batch_size, sentence_length_target, sentence_length_source)),
-    #                                         score='concat')        
-    #     # -> (batch_size, sentence_length_target, hidden)
+        attention_output = global_attention(dec_output, enc_output,
+                                            mask=F.broadcast(F.reshape(input_mask, shape=(batch_size, 1, sentence_length_source)),
+                                                             shape=(batch_size, sentence_length_target, sentence_length_source)),
+                                            score='concat')        
+        # -> (batch_size, sentence_length_target, hidden)
 
-    # output = F.concatenate(dec_output, attention_output, axis=2)
+    output = F.concatenate(dec_output, attention_output, axis=2)
 
-    output = time_distributed(PF.affine)(dec_output, vocab_size_target, name='output')
+    output = time_distributed(PF.affine)(output, vocab_size_target, name='output')
     # -> (batch_size, sentence_length_target, vocab_size_target)
 
     t = F.reshape(F.slice(y), (batch_size, sentence_length_target, 1))
