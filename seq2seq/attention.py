@@ -22,6 +22,8 @@ from parametric_functions import lstm
 from parametric_functions import lstm_cell
 from parametric_functions import global_attention
 
+from functions import get_mask
+from functions import get_attention_logit_mask
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 
@@ -74,60 +76,62 @@ def load_dev_func(index):
 train_data_iter = data_iterator_simple(load_train_func, len(train_source), batch_size, shuffle=True, with_file_cache=False)
 dev_data_iter = data_iterator_simple(load_dev_func, len(dev_source), batch_size, shuffle=True, with_file_cache=False)
 
-# def where(enable, c, c_prev):
-#     batch_size, units = c.shape
-#     ret = []
-#     for e, _c, _c_prev in zip(F.split(enable, axis=0), F.split(c, axis=0), F.split(c_prev, axis=0)):
-#         if e.d == 1:
-#             ret.append(F.reshape(_c, (1, units)))
-#         else:
-#             ret.append(F.reshape(_c_prev, (1, units)))
-#     return F.concatenate(*ret, axis=0)
 
-# def Maxout(x, units, pool_size=128, name='maxout'):
-#     batch_size = x.shape[0]
-#     h = PF.affine(x, units*pool_size, name='maxout')
-#     h = F.reshape(h, (batch_size, units, pool_size))
-#     h = F.max(h, axis=2)
-#     return h
+def build_model():
+    x = nn.Variable((batch_size, sentence_length_source))
+    mask = get_mask(x)
+    y = nn.Variable((batch_size, sentence_length_target))
+    
+    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings') * mask
+    # -> (batch_size, sentence_length_source, embedding_size)
 
-# def GlobalAttention(hs, attention_units):
-#     # hs -> (batch_size, sentence_legnth_source, embedding_size)
-#     hs = time_distributed(PF.affine)(hs, attention_units, with_bias=False, name='Wahs')
-#     # -> (batch_size, sentence_legnth_source, attention_units)
+    dec_input = F.concatenate(F.constant(w2i_target['<bos>'], shape=(batch_size, 1)),
+                              y[:, :sentence_length_target-1],
+                              axis=1)
 
-#     def compute_context(prev_state):
-#         batch_size = prev_state.shape[0]
-#         ht = PF.affine(prev_state, attention_units, with_bias=False, name='Waht')
-#         # -> (batch_size, attention_units)
-#         ht = F.reshape(ht, (batch_size, 1, attention_units))
-#         # -> (batch_size, 1, attention_units)
-#         ht = F.broadcast(ht, (batch_size, sentence_length_source, attention_units))
-#         # -> (batch_size, sentence_length_source, attention_units)
+    dec_input = time_distributed(PF.embed)(dec_input, vocab_size_target, embedding_size, name='dec_embeddings')
+    # -> (batch_size, sentence_length_target, embedding_size)
 
-#         attention = F.tanh(hs + ht)
-#         # -> (batch_size, sentence_length_source, attention_units)
-#         attention = time_distributed(PF.affine)(attention, 1, with_bias=False, name='attention')
-#         # -> (batch_size, sentence_length_source, 1)
-#         attention = F.softmax(attention, axis=1)
-#         # -> (batch_size, sentence_length_source, 1)
+    # encoder
+    with nn.parameter_scope('encoder'):
+        enc_output, c, h = lstm(enc_input, hidden, mask=mask, return_sequences=True, return_state=True)
+        # -> (batch_size, sentence_length_source, hidden), (batch_size, hidden), (batch_size, hidden)
 
-#         context = F.batch_matmul(hs, attention, transpose_a=True)
-#         context = F.reshape(context, (batch_size, attention_units))
+    # decoder
+    with nn.parameter_scope('decoder'):
+        dec_output = lstm(dec_input, hidden, initial_state=(c, h), return_sequences=True)
+        # -> (batch_size, sentence_length_target, hidden)
 
-#         return context
+        attention_output = global_attention(dec_output, enc_output, mask=mask, score='dot')
+        # -> (batch_size, sentence_length_target, hidden)
 
-#     return compute_context
+    output = F.concatenate(dec_output, attention_output, axis=2)
+
+    output = time_distributed(PF.affine)(output, vocab_size_target, name='output')
+    # -> (batch_size, sentence_length_target, vocab_size_target)
+
+    t = F.reshape(y, (batch_size, sentence_length_target, 1))
+
+    entropy = time_distributed_softmax_cross_entropy(output, t)
+
+    mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
+    count = F.sum(mask, axis=1)
+
+    entropy *= mask
+    loss = F.mean(F.sum(entropy, axis=1)/count)
+    return x, y, loss
+
 
 def predict(x):
     with nn.auto_forward():
         x = x.reshape((1, sentence_length_source))
         enc_input = nn.Variable.from_numpy_array(x)
-        enc_input = time_distributed(PF.embed)(enc_input, vocab_size_source, embedding_size, name='enc_embeddings')
+        mask = get_mask(enc_input)
+        enc_input = time_distributed(PF.embed)(enc_input, vocab_size_source, embedding_size, name='enc_embeddings') * mask
 
         # encoder
         with nn.parameter_scope('encoder'):
-            enc_output, c, h = lstm(enc_input, hidden, return_sequences=True, return_state=True)
+            enc_output, c, h = lstm(enc_input, hidden, mask=mask, return_sequences=True, return_state=True)
         
         # decode
         pad = nn.Variable.from_numpy_array(np.array([w2i_target['<bos>']]))
@@ -143,14 +147,13 @@ def predict(x):
                 with nn.parameter_scope('lstm'):
                     _cell, _hidden = lstm_cell(x, _cell, _hidden)
                     q = F.reshape(_hidden, (1, 1, hidden))
-                    attention_output = global_attention(q, enc_output)
+                    attention_output = global_attention(q, enc_output, mask=mask, score='dot')
             attention_output = F.reshape(attention_output, (1, hidden))
             output = F.concatenate(_hidden, attention_output, axis=1)
             output = PF.affine(output, vocab_size_target, name='output')
 
             word_index = np.argmax(output.d[0])
             ret.append(word_index)
-            print(word_index)
             x = nn.Variable.from_numpy_array(np.array([word_index], dtype=np.int32))
             x = PF.embed(x, vocab_size_target, embedding_size, name='dec_embeddings')
 
@@ -171,53 +174,6 @@ def translate(sentence):
     sentence += [0]*(sentence_length_source - len(sentence))
     sentence.reverse()
     return ''.join([i2w_target[i] for i in predict(np.array([sentence]))])
-
-def build_model():
-    x = nn.Variable((batch_size, sentence_length_source))
-    input_mask = F.sign(F.reshape(F.slice(x), (batch_size, sentence_length_source, 1)))
-    y = nn.Variable((batch_size, sentence_length_target))
-    
-    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')*F.sign(F.reshape(x, (batch_size, sentence_length_source, 1)))
-    # -> (batch_size, sentence_length_source, embedding_size)
-
-    dec_input = F.concatenate(F.constant(w2i_target['<bos>'], shape=(batch_size, 1)),
-                              F.slice(y, stop=(batch_size, sentence_length_target-1)),
-                              axis=1)
-
-    dec_input = time_distributed(PF.embed)(dec_input, vocab_size_target, embedding_size, name='dec_embeddings')
-    # -> (batch_size, sentence_length_target, embedding_size)
-
-    # encoder
-    with nn.parameter_scope('encoder'):
-        enc_output, c, h = lstm(enc_input, hidden, return_sequences=True, return_state=True)
-        # -> (batch_size, sentence_length_source, hidden), (batch_size, hidden), (batch_size, hidden)
-
-    # decoder
-    with nn.parameter_scope('decoder'):
-        dec_output = lstm(dec_input, hidden, initial_state=(c, h), return_sequences=True)
-        # -> (batch_size, sentence_length_target, hidden)
-
-        attention_output = global_attention(dec_output, enc_output,
-                                            mask=F.broadcast(F.reshape(input_mask, shape=(batch_size, 1, sentence_length_source)),
-                                                             shape=(batch_size, sentence_length_target, sentence_length_source)),
-                                            score='concat')        
-        # -> (batch_size, sentence_length_target, hidden)
-
-    output = F.concatenate(dec_output, attention_output, axis=2)
-
-    output = time_distributed(PF.affine)(output, vocab_size_target, name='output')
-    # -> (batch_size, sentence_length_target, vocab_size_target)
-
-    t = F.reshape(F.slice(y), (batch_size, sentence_length_target, 1))
-
-    entropy = time_distributed_softmax_cross_entropy(output, t)
-
-    mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
-    count = F.sum(mask, axis=1)
-
-    entropy *= mask
-    loss = F.mean(F.sum(entropy, axis=1)/count)
-    return x, y, loss
 
 x, y, loss = build_model()
 
@@ -250,7 +206,7 @@ for epoch in range(max_epoch):
 
     dev_loss_set = []
     for i in range(num_dev_batch):
-        x.d, y.d = train_data_iter.next()
+        x.d, y.d = dev_data_iter.next()
         loss.forward()
         dev_loss_set.append(loss.d.copy())
 
