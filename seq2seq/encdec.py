@@ -21,6 +21,7 @@ from tqdm import tqdm
 from parametric_functions import lstm
 from parametric_functions import lstm_cell
 
+from functions import get_mask
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 
@@ -37,8 +38,6 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-# nn.load_parameters('encdec_best.h5')
-
 from utils import load_data
 from utils import with_padding
 
@@ -52,15 +51,13 @@ train_target = with_padding(train_target, padding_type='post').astype(np.int32)
 dev_target = with_padding(dev_target, padding_type='post').astype(np.int32)
 test_target = with_padding(test_target, padding_type='post').astype(np.int32)
 
-period = '。'
-
 vocab_size_source = len(w2i_source)
 vocab_size_target = len(w2i_target)
 sentence_length_source = train_source.shape[1]
 sentence_length_target = train_target.shape[1]
 embedding_size = 1024
 hidden = 1024
-batch_size = 256
+batch_size = 64
 max_epoch = 500
 
 num_train_batch = len(train_source)//batch_size
@@ -75,129 +72,36 @@ def load_dev_func(index):
 train_data_iter = data_iterator_simple(load_train_func, len(train_source), batch_size, shuffle=True, with_file_cache=False)
 dev_data_iter = data_iterator_simple(load_dev_func, len(dev_source), batch_size, shuffle=True, with_file_cache=False)
 
-# def where(enable, c, c_prev):
-#     batch_size, units = c.shape
-#     ret = []
-#     for e, _c, _c_prev in zip(F.split(enable, axis=0), F.split(c, axis=0), F.split(c_prev, axis=0)):
-#         if e.d == 1:
-#             ret.append(F.reshape(_c, (1, units)))
-#         else:
-#             ret.append(F.reshape(_c_prev, (1, units)))
-#     return F.concatenate(*ret, axis=0)
-
-LSTMEncoder = lstm
-
-def LSTMDecoder(inputs=None, initial_state=None, return_sequences=False, return_state=False, inference_params=None, name='lstm'):
-
-    if inputs is None:
-        assert inference_params is not None, 'if inputs is None, inference_params must not be None.'
-    else:
-        sentence_length = inputs.shape[1]
-
-    assert type(initial_state) is tuple or type(initial_state) is list, \
-           'initial_state must be a typle or a list.'
-    assert len(initial_state) == 2, \
-           'initial_state must have only two states.'
-
-    c0, h0 = initial_state
-
-    assert c0.shape == h0.shape, 'shapes of initial_state must be same.'
-    batch_size, units = c0.shape
-
-    cell = c0
-    hidden = h0
-
-    hs = []
-
-    if inference_params is None:
-        xs = F.split(F.slice(inputs, stop=(batch_size, sentence_length-1, units)), axis=1)
-        xs = [nn.Variable.from_numpy_array(np.ones(xs[0].shape))] + list(xs)
-        for x in xs:
-            with nn.parameter_scope(name):
-                cell, hidden = lstm_cell(x, cell, hidden)
-            hs.append(hidden)
-    else:
-        assert batch_size == 1, 'batch size of inference mode must be 1.'
-        embed_weight, output_weight, output_bias = inference_params
-        x = nn.Variable.from_numpy_array(np.ones((1, embed_weight.shape[1])))
-
-        word_index = 0
-        ret = []
-        i = 0
-        while i2w_target[word_index] != period and i < 20:
-            with nn.parameter_scope(name):
-                cell, hidden = lstm_cell(x, cell, hidden)
-            output = F.affine(hidden, output_weight, bias=output_bias)
-            word_index = np.argmax(output.d[0])
-            ret.append(word_index)
-            x = nn.Variable.from_numpy_array(np.array([word_index], dtype=np.int32))
-            x = F.embed(x, embed_weight)
-
-            i+=1
-        return ret
-
-
-    if return_sequences:
-        ret = F.stack(*hs, axis=1)
-    else:
-        ret = hs[-1]
-
-    if return_state:
-        return ret, cell, hidden
-    else:
-        return ret
-
-
-
-def predict(x):
-    with nn.auto_forward():
-        x = x.reshape((1, sentence_length_source))
-        enc_input = nn.Variable.from_numpy_array(x)
-        enc_input = time_distributed(PF.embed)(enc_input, vocab_size_source, embedding_size, name='enc_embeddings')
-
-        # encoder
-        with nn.parameter_scope('encoder'):
-            output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True)
-
-        # decoder
-        params = [nn.get_parameters()['dec_embeddings/embed/W'],
-                  nn.get_parameters()['output/affine/W'],
-                  nn.get_parameters()['output/affine/b']]
-        ret = LSTMDecoder(initial_state=(c, h), inference_params=params, name='decoder')
-
-        return ret
-
-def translate(index):
-    print('source:')
-    src = [i2w_source[i] for i in test_source[index][test_source[index]!=0]][::-1]
-    print(' '.join(src))
-    print('target:')
-    tgt = [i2w_target[i] for i in test_target[index][test_target[index]!=0]]
-    print(''.join(tgt))
-    print('encoder-decoder output:')
-    pred = predict(test_source[index])
-    pred = [i2w_target[i] for i in pred]
-    print(''.join(pred))
-    from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-    cc = SmoothingFunction()
-    print(f'BLEU: {sentence_bleu([tgt], pred, smoothing_function=cc.method3)}')
 
 def build_model():
     x = nn.Variable((batch_size, sentence_length_source))
+    mask = get_mask(x)
     y = nn.Variable((batch_size, sentence_length_target))
     
-    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings')*F.sign(F.reshape(x, (batch_size, sentence_length_source, 1)))
-    dec_input = time_distributed(PF.embed)(y, vocab_size_target, embedding_size, name='dec_embeddings')
+    enc_input = time_distributed(PF.embed)(x, vocab_size_source, embedding_size, name='enc_embeddings') * mask
+    # -> (batch_size, sentence_length_source, embedding_size)
+
+    dec_input = F.concatenate(F.constant(w2i_target['<bos>'], shape=(batch_size, 1)),
+                              y[:, :sentence_length_target-1],
+                              axis=1)
+
+    dec_input = time_distributed(PF.embed)(dec_input, vocab_size_target, embedding_size, name='dec_embeddings')
+    # -> (batch_size, sentence_length_target, embedding_size)
 
     # encoder
     with nn.parameter_scope('encoder'):
-        output, c, h = LSTMEncoder(enc_input, hidden, return_sequences=True, return_state=True)
+        enc_output, c, h = lstm(enc_input, hidden, mask=mask, return_sequences=True, return_state=True)
+        # -> (batch_size, sentence_length_source, hidden), (batch_size, hidden), (batch_size, hidden)
 
     # decoder
-    output = LSTMDecoder(dec_input, initial_state=(c, h), return_sequences=True, name='decoder')
-    output = time_distributed(PF.affine)(output, vocab_size_target, name='output')
+    with nn.parameter_scope('decoder'):
+        dec_output = lstm(dec_input, hidden, initial_state=(c, h), return_sequences=True)
+        # -> (batch_size, sentence_length_target, hidden)
 
-    t = F.reshape(F.slice(y), (batch_size, sentence_length_target, 1))
+    output = time_distributed(PF.affine)(dec_output, vocab_size_target, name='output')
+    # -> (batch_size, sentence_length_target, vocab_size_target)
+
+    t = F.reshape(y, (batch_size, sentence_length_target, 1))
 
     entropy = time_distributed_softmax_cross_entropy(output, t)
 
@@ -208,6 +112,56 @@ def build_model():
     loss = F.mean(F.sum(entropy, axis=1)/count)
     return x, y, loss
 
+
+def predict(x):
+    with nn.auto_forward():
+        x = x.reshape((1, sentence_length_source))
+        enc_input = nn.Variable.from_numpy_array(x)
+        mask = get_mask(enc_input)
+        enc_input = time_distributed(PF.embed)(enc_input, vocab_size_source, embedding_size, name='enc_embeddings') * mask
+
+        # encoder
+        with nn.parameter_scope('encoder'):
+            enc_output, c, h = lstm(enc_input, hidden, mask=mask, return_sequences=True, return_state=True)
+        
+        # decode
+        pad = nn.Variable.from_numpy_array(np.array([w2i_target['<bos>']]))
+        x = PF.embed(pad, vocab_size_target, embedding_size, name='dec_embeddings')
+
+        _cell, _hidden = c, h
+
+        word_index = 0
+        ret = []
+        i = 0
+        while i2w_target[word_index] != '。' and i < 20:
+            with nn.parameter_scope('decoder'):
+                with nn.parameter_scope('lstm'):
+                    _cell, _hidden = lstm_cell(x, _cell, _hidden)
+            output = PF.affine(_hidden, vocab_size_target, name='output')
+
+            word_index = np.argmax(output.d[0])
+            ret.append(word_index)
+            x = nn.Variable.from_numpy_array(np.array([word_index], dtype=np.int32))
+            x = PF.embed(x, vocab_size_target, embedding_size, name='dec_embeddings')
+
+            i+=1
+
+        return ret
+
+def translate_test(index):
+    print('source:')
+    print(' '.join([i2w_source[i] for i in test_source[index]][::-1]).strip(' pad'))
+    print('target:')
+    print(''.join([i2w_target[i] for i in test_target[index]]).strip('pad'))
+    print('encoder-decoder output:')
+    print(''.join([i2w_target[i] for i in predict(test_source[index])]).strip('pad'))
+
+def translate(sentence):
+    sentence = list(map(lambda x: w2i_source[x], sentence.split()))
+    sentence += [0]*(sentence_length_source - len(sentence))
+    sentence.reverse()
+    return ''.join([i2w_target[i] for i in predict(np.array([sentence]))])
+
 x, y, loss = build_model()
 
 # Create solver.
@@ -217,7 +171,7 @@ solver.set_parameters(nn.get_parameters())
 # Create monitor.
 from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
 monitor = Monitor('./tmp-encdec')
-monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
+monitor_perplexity_train = MonitorSeries('perplexity_train', monitor, interval=1)
 monitor_perplexity_dev = MonitorSeries('perplexity_dev', monitor, interval=1)
 
 best_dev_loss = 9999
@@ -229,7 +183,7 @@ for epoch in range(max_epoch):
         x.d, y.d = train_data_iter.next()
         loss.forward()
         solver.zero_grad()
-        loss.backward(clear_buffer=True)
+        loss.backward()
         solver.update()
         train_loss_set.append(loss.d.copy())
 
@@ -239,18 +193,18 @@ for epoch in range(max_epoch):
 
     dev_loss_set = []
     for i in range(num_dev_batch):
-        x.d, y.d = train_data_iter.next()
+        x.d, y.d = dev_data_iter.next()
         loss.forward()
         dev_loss_set.append(loss.d.copy())
 
-    monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
+    monitor_perplexity_train.add(epoch+1, np.e**np.mean(train_loss_set))
     monitor_perplexity_dev.add(epoch+1, np.e**np.mean(dev_loss_set))
 
-    dev_loss = np.e**np.mean(dev_loss_set)
-    if best_dev_loss > dev_loss:
-        best_dev_loss = dev_loss
-        print('best dev loss updated! {}'.format(dev_loss))
-        nn.save_parameters('encdec_best.h5')
+    # dev_loss = np.e**np.mean(dev_loss_set)
+    # if best_dev_loss > dev_loss:
+    #     best_dev_loss = dev_loss
+    #     print('best dev loss updated! {}'.format(dev_loss))
+    #     nn.save_parameters('encdec_best.h5')
 
 
 
