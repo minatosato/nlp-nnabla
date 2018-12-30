@@ -81,8 +81,9 @@ char_embedding_dim = 16
 lstm_size = 650
 filters = [50, 100, 150, 200, 200, 200, 200]
 filster_sizes = [1, 2, 3, 4, 5, 6, 7]
+dropout_ratio = 0.5
 
-def build_model(get_embeddings=False):
+def build_model(train=True, get_embeddings=False):
     x = nn.Variable((batch_size, sentence_length, word_length))
     mask = F.reshape(F.sign(x), shape=(batch_size, sentence_length, word_length, 1))
 
@@ -113,7 +114,9 @@ def build_model(get_embeddings=False):
     with nn.parameter_scope('lstm2'):
         h = lstm(h, lstm_size, mask=mask, return_sequences=True)
     with nn.parameter_scope('hidden'):
-        h = time_distributed(PF.affine)(h, lstm_size)
+        h = F.relu(time_distributed(PF.affine)(h, lstm_size))
+    if train:
+        h = F.dropout(h, p=dropout_ratio)
     with nn.parameter_scope('output'):
         y = time_distributed(PF.affine)(h, word_vocab_size)
     t = nn.Variable((batch_size, sentence_length, 1))
@@ -141,6 +144,7 @@ best_dev_loss = 9999
 for epoch in range(max_epoch):
     train_loss_set = []
     progress = tqdm(total=train_data_iter.size//batch_size)
+    x, t, loss = build_model()
     for i in range(num_train_batch):
         x_batch, y_batch = train_data_iter.next()
         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
@@ -159,6 +163,7 @@ for epoch in range(max_epoch):
     progress.close()
 
     dev_loss_set = []
+    x, t, loss = build_model(train=False)
     for i in range(num_valid_batch):
         x_batch, y_batch = valid_data_iter.next()
         y_batch = y_batch.reshape(list(y_batch.shape) + [1])

@@ -24,6 +24,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from functions import time_distributed
+from functions import get_mask
 from utils import load_imdb
 from utils import with_padding
 
@@ -97,7 +98,7 @@ def global_average_pooling_1d(x, mask):
 
 x = nn.Variable((batch_size, max_len))
 t = nn.Variable((batch_size, 1))
-mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
+mask = get_mask(x)
 with nn.parameter_scope('embedding'):
     h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
 h = global_average_pooling_1d(h, mask)

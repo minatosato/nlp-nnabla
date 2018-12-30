@@ -40,7 +40,7 @@ if args.context == 'cudnn':
     nn.set_default_context(ctx)
 
 max_len: int = 400
-batch_size: int = 128
+batch_size: int = 64
 embedding_size: int = 300
 hidden_size: int = 300
 da: int = 350
