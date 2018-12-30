@@ -12,6 +12,7 @@ import nnabla.parametric_functions as PF
 import numpy as np
 
 from typing import Optional
+from typing import Tuple
 
 from functions import time_distributed
 from functions import where
@@ -54,21 +55,22 @@ def simple_rnn(inputs: nn.Variable, units: int, mask: Optional[nn.Variable] = No
     else:
         return hs[-1]
 
-def lstm_cell(x, c, h):
+def lstm_cell(x: nn.Variable, c: nn.Variable, h: nn.Variable) -> nn.Variable:
     batch_size, units = c.shape
     _hidden = PF.affine(F.concatenate(x, h, axis=1), 4*units)
 
-    a            = F.tanh   (F.slice(_hidden, start=(0, units*0), stop=(batch_size, units*1)))
-    input_gate   = F.sigmoid(F.slice(_hidden, start=(0, units*1), stop=(batch_size, units*2)))
-    forgate_gate = F.sigmoid(F.slice(_hidden, start=(0, units*2), stop=(batch_size, units*3)))
-    output_gate  = F.sigmoid(F.slice(_hidden, start=(0, units*3), stop=(batch_size, units*4)))
+    a            = F.tanh   (_hidden[:, units*0: units*1])
+    input_gate   = F.sigmoid(_hidden[:, units*1: units*2])
+    forgate_gate = F.sigmoid(_hidden[:, units*2: units*3])
+    output_gate  = F.sigmoid(_hidden[:, units*3: units*4])
 
     cell = input_gate * a + forgate_gate * c
     hidden = output_gate * F.tanh(cell)
     return cell, hidden
 
 @PF.parametric_function_api('lstm')
-def lstm(inputs, units, mask:Optional[nn.Variable]=None, initial_state=None, return_sequences=False, return_state=False, fix_parameters=False):
+def lstm(inputs: nn.Variable, units: int, mask: Optional[nn.Variable] = None, initial_state: Tuple[nn.Variable, nn.Variable] = None,
+         return_sequences: bool = False, return_state: bool = False, fix_parameters: bool = False) -> nn.Variable:
     '''
     A long short-term memory
     Args:
@@ -129,17 +131,16 @@ def lstm(inputs, units, mask:Optional[nn.Variable]=None, initial_state=None, ret
 
 
 @PF.parametric_function_api('highway')
-def highway(x, fix_parameters=False):
+def highway(x: nn.Variable, fix_parameters: bool = False) -> nn.Variable:
     '''
     A densely connected highway network layer
     Args:
-        x (nnabla.Variable): A shape of [batch_size units]
+        x (nnabla.Variable): A shape of [batch_size, units]
         fix_parameters (bool): Fix parameters (Set need_grad=False).
     Returns:
-        nn.Variable: A shape [batch_size units].
+        nn.Variable: A shape [batch_size, units].
     '''
     batch_size, in_out_size = x.shape
-
 
     with nn.parameter_scope('plain'):
         out_plain = F.relu(PF.affine(x, in_out_size, fix_parameters=fix_parameters))
@@ -149,64 +150,66 @@ def highway(x, fix_parameters=False):
     return y
 
 @PF.parametric_function_api('global_attention')
-def global_attention(inputs:nn.Variable, memory:nn.Variable, mask:Optional[nn.Variable]=None, score:str='general', fix_parameters=False):
+def global_attention(query: nn.Variable, memory: nn.Variable, mask: Optional[nn.Variable] = None,
+                     score: str = 'general', fix_parameters: bool = False) -> nn.Variable:
     '''
     A global attention layer
     Args:
-        inputs (nnabla.Variable): A shape of [batch_size sen_len_query, units]
-        memory (nnabla.Variable): A shape of [batch_size sen_len_memory, units]
-        mask (nnabla.Variable): A shape of [batch_size sen_len_query, sen_len_memory]
+        query (nnabla.Variable): A shape of [batch_size, length_query, embedding_size]
+        memory (nnabla.Variable): A shape of [batch_size, length_memory, embedding_size]
+        mask (nnabla.Variable): A shape of [batch_size, length_query, length_memory]
         score (str): A kind of score functions for calculating attention weights.
                      'general', 'dot' or 'concat'.
-                     see [Effective Approaches to Attention-based Neural Machine Translation](http://aclweb.org/anthology/D15-1166)
+                     see [Effective Approaches to Attention-based Neural Machine Translation]
+                         (http://aclweb.org/anthology/D15-1166)
         fix_parameters (bool): Fix parameters (Set need_grad=False).
     Returns:
-        nn.Variable: A shape [batch_size units].
+        nn.Variable: A shape [batch_size, length_query, embedding_size].
     '''
-    batch_size, sentence_length_query, embedding_size =  inputs.shape
-    _, sentence_length_memory, _ = memory.shape
-    q = inputs
-    # -> (batch_size, sentence_length_query, embedding_size)
+    batch_size, length_query, embedding_size =  query.shape
+    _, length_memory, _ = memory.shape
+    q = query
+    # -> (batch_size, length_query, embedding_size)
     k = memory
-    # -> (batch_size, sentence_length_memory, embedding_size)
+    # -> (batch_size, length_memory, embedding_size)
     v = memory
-    # -> (batch_size, sentence_length_memory, embedding_size)
+    # -> (batch_size, length_memory, embedding_size)
     if score == 'dot':
         logit = F.batch_matmul(q, k, transpose_b=True)
-        # -> (batch_size, sentence_length_query, sentence_length_memory)
+        # -> (batch_size, length_query, length_memory)
     elif score == 'general':
         with nn.parameter_scope('Wa'):
             wa = time_distributed(PF.affine)(q, embedding_size, with_bias=False)
-            # -> (batch_size, sentence_length_query, embeding_size)
+            # -> (batch_size, length_query, embeding_size)
         logit = F.batch_matmul(wa, k, transpose_b=True)
-        # -> (batch_size, sentence_length_query, sentence_length_memory)
+        # -> (batch_size, length_query, length_memory)
     elif score == 'concat':
         a_list = []
         for _q in F.split(q, axis=1):
             _q = F.reshape(_q, shape=(batch_size, 1, embedding_size))
-            _q = F.broadcast(_q, shape=(batch_size, sentence_length_memory, embedding_size))
+            _q = F.broadcast(_q, shape=(batch_size, length_memory, embedding_size))
             concat = F.concatenate(_q, k, axis=2)
-            # -> (batch_size, sentence_length_memory, embedding_size * 2)
+            # -> (batch_size, length_memory, embedding_size * 2)
             with nn.parameter_scope('Wa'):
                 a = time_distributed(PF.affine)(concat, 1, with_bias=False)
-                # -> (batch_size, sentence_length_memory, 1)
+                # -> (batch_size, length_memory, 1)
                 a_list.append(a)
         
         logit = F.concatenate(*a_list, axis=2)
-        # -> (batch_size, sentence_length_memory, sentence_length_query)
+        # -> (batch_size, length_memory, length_query)
         logit = F.transpose(logit, axes=(0, 2, 1))
-        # -> (batch_size, sentence_length_query, sentence_length_memory)
+        # -> (batch_size, length_query, length_memory)
     
-    # maskのshapeは-> (batch_size, sentence_length_query, sentence_length_memory)である
+    # get_attention_logit_mask -> (batch_size, length_query, length_memory)である
     if mask is not None:
         logit += get_attention_logit_mask(mask)
 
 
     attention_weights = F.softmax(logit, axis=2)
-    # -> (batch_size, sentence_length_query, sentence_length_memory)
+    # -> (batch_size, length_query, length_memory)
 
     attention_output = F.batch_matmul(attention_weights, v)
-    # -> (batch_size, sentence_length_query, embedding_size)
+    # -> (batch_size, length_query, embedding_size)
 
     return attention_output
 
