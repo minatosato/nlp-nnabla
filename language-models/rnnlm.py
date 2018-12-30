@@ -22,13 +22,14 @@ from tqdm import tqdm
 from parametric_functions import simple_rnn
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
+from functions import get_mask
 
 from utils import load_data
 from utils import w2i, i2w, c2i, i2c, word_length
 from utils import with_padding
 
 import argparse
-parser = argparse.ArgumentParser(description='Encoder-decoder model training.')
+parser = argparse.ArgumentParser(description='Recurrent neural network language model training.')
 parser.add_argument('--context', '-c', type=str,
                     default='cpu', help='You can choose cpu or cudnn.')
 parser.add_argument('--device', '-d', type=int,
@@ -47,10 +48,10 @@ valid_data = load_data('./ptb/valid.txt')
 valid_data = with_padding(valid_data, padding_type='post')
 
 vocab_size = len(w2i)
-sentence_length = 20
+sentence_length = 60
 embedding_size = 128
 hidden_size = 128
-batch_size = 256
+batch_size = 32
 max_epoch = 100
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
@@ -72,18 +73,18 @@ train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size
 valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size, shuffle=True, with_file_cache=False)
 
 x = nn.Variable((batch_size, sentence_length))
+mask = get_mask(x)
 t = nn.Variable((batch_size, sentence_length, 1))
 with nn.parameter_scope('embedding'):
-    h = PF.embed(x, vocab_size, embedding_size)
+    h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
 with nn.parameter_scope('rnn1'):
-    h = simple_rnn(h, hidden_size, return_sequences=True)
+    h = simple_rnn(h, hidden_size, mask=mask, return_sequences=True)
 with nn.parameter_scope('hidden'):
     h = time_distributed(PF.affine)(h, hidden_size)
 with nn.parameter_scope('output'):
     y = time_distributed(PF.affine)(h, vocab_size)
 
-mask = F.sum(F.greater_scalar(t, 0), axis=2) # do not predict 'pad'.
-# mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
+mask = F.sum(mask, axis=2)
 entropy = time_distributed_softmax_cross_entropy(y, t) * mask
 count = F.sum(mask, axis=1)
 loss = F.mean(F.div2(F.sum(entropy, axis=1), count))

@@ -29,7 +29,7 @@ from utils import w2i, i2w, c2i, i2c, word_length
 from utils import with_padding
 
 import argparse
-parser = argparse.ArgumentParser(description='char-cnn-lstm language model training.')
+parser = argparse.ArgumentParser(description='Char-cnn-lstm language model training.')
 parser.add_argument('--context', '-c', type=str,
                     default='cpu', help='You can choose cpu or cudnn.')
 parser.add_argument('--device', '-d', type=int,
@@ -49,7 +49,7 @@ valid_data = load_data('./ptb/valid.txt')
 valid_data = with_padding(valid_data, padding_type='post')
 
 sentence_length = 60
-batch_size = 32
+batch_size = 100
 max_epoch = 300
 
 word_vocab_size = len(w2i)
@@ -84,7 +84,7 @@ filster_sizes = [1, 2, 3, 4, 5, 6, 7]
 
 def build_model(get_embeddings=False):
     x = nn.Variable((batch_size, sentence_length, word_length))
-    mask = F.reshape(F.sign(F.sum(x, axis=2)), shape=(batch_size, sentence_length, 1, 1))
+    mask = F.reshape(F.sign(x), shape=(batch_size, sentence_length, word_length, 1))
 
     with nn.parameter_scope('char_embedding'):
         h = PF.embed(x, char_vocab_size, char_embedding_dim) * mask
@@ -97,6 +97,7 @@ def build_model(get_embeddings=False):
     h = F.concatenate(*output, axis=1)
     h = F.transpose(h, (0, 2, 1, 3))
 
+    mask = F.reshape(F.sign(F.sum(x, axis=2)), shape=(batch_size, sentence_length, 1, 1))
     mask = F.sign(F.sum(x, axis=2, keepdims=True))
     embeddings = F.reshape(h, (batch_size, sentence_length, sum(filters))) * mask
 
