@@ -22,6 +22,7 @@ from parametric_functions import lstm
 from functions import time_distributed
 from functions import frobenius
 from functions import batch_eye
+from functions import get_mask
 from utils import load_imdb
 from utils import with_padding
 
@@ -74,14 +75,14 @@ dev_data_iter = data_iterator_simple(load_dev_func, len(x_test), batch_size, shu
 def build_self_attention_model(train=True):
     x = nn.Variable((batch_size, max_len))
     t = nn.Variable((batch_size, 1))
-    mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
+    mask = get_mask(x)
     attention_mask = (F.constant(1, shape=mask.shape) - mask) * F.constant(np.finfo(np.float32).min, shape=mask.shape)
     with nn.parameter_scope('embedding'):
         h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
     with nn.parameter_scope('forward'):
-        h_f = lstm(h,            hidden_size, return_sequences=True, return_state=False)
+        h_f = lstm(h,            hidden_size, mask=mask, return_sequences=True, return_state=False)
     with nn.parameter_scope('backward'):
-        h_b = lstm(h[:, ::-1, ], hidden_size, return_sequences=True, return_state=False)[:, ::-1, ]
+        h_b = lstm(h[:, ::-1, ], hidden_size, mask=mask, return_sequences=True, return_state=False)[:, ::-1, ]
     h = F.concatenate(h_f, h_b, axis=2)
     if train:
         h = F.dropout(h, p=dropout_ratio)

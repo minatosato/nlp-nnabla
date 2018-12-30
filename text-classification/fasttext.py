@@ -97,10 +97,10 @@ def global_average_pooling_1d(x, mask):
 
 x = nn.Variable((batch_size, max_len))
 t = nn.Variable((batch_size, 1))
-input_mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
+mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
 with nn.parameter_scope('embedding'):
-    h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * input_mask
-h = global_average_pooling_1d(h, input_mask)
+    h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
+h = global_average_pooling_1d(h, mask)
 with nn.parameter_scope('output'):
     y = F.sigmoid(PF.affine(h, 1))
 

@@ -63,8 +63,11 @@ def wordseq2charseq(data):
     for i in range(data.shape[0]):
         for j in range(data.shape[1]):
             word = data[i][j][0]
-            for k, char in enumerate(i2w[word]):
-                data[i][j][k] = c2i[char]
+            if word != 0:
+                for k, char in enumerate(i2w[word]):
+                    data[i][j][k] = c2i[char]
+            else:
+                data[i, j, :] = 0
     return data
 
 def with_padding(sequences, padding_type='post', max_sequence_length=None):

@@ -29,7 +29,7 @@ from utils import w2i, i2w, c2i, i2c, word_length
 from utils import with_padding
 
 import argparse
-parser = argparse.ArgumentParser(description='Encoder-decoder model training.')
+parser = argparse.ArgumentParser(description='char-cnn-lstm language model training.')
 parser.add_argument('--context', '-c', type=str,
                     default='cpu', help='You can choose cpu or cudnn.')
 parser.add_argument('--device', '-d', type=int,
@@ -48,8 +48,8 @@ train_data = with_padding(train_data, padding_type='post')
 valid_data = load_data('./ptb/valid.txt')
 valid_data = with_padding(valid_data, padding_type='post')
 
-sentence_length = 20
-batch_size = 256
+sentence_length = 60
+batch_size = 32
 max_epoch = 300
 
 word_vocab_size = len(w2i)
@@ -84,9 +84,10 @@ filster_sizes = [1, 2, 3, 4, 5, 6, 7]
 
 def build_model(get_embeddings=False):
     x = nn.Variable((batch_size, sentence_length, word_length))
+    mask = F.reshape(F.sign(F.sum(x, axis=2)), shape=(batch_size, sentence_length, 1, 1))
 
     with nn.parameter_scope('char_embedding'):
-        h = PF.embed(x, char_vocab_size, char_embedding_dim)
+        h = PF.embed(x, char_vocab_size, char_embedding_dim) * mask
     h = F.transpose(h, (0, 3, 1, 2))
     output = []
     for f, f_size in zip(filters, filster_sizes):
@@ -96,7 +97,8 @@ def build_model(get_embeddings=False):
     h = F.concatenate(*output, axis=1)
     h = F.transpose(h, (0, 2, 1, 3))
 
-    embeddings = F.reshape(h, (batch_size, sentence_length, sum(filters)))
+    mask = F.sign(F.sum(x, axis=2, keepdims=True))
+    embeddings = F.reshape(h, (batch_size, sentence_length, sum(filters))) * mask
 
     if get_embeddings:
         return x, embeddings
@@ -106,9 +108,9 @@ def build_model(get_embeddings=False):
     with nn.parameter_scope('highway2'):
         h = time_distributed(highway)(h)
     with nn.parameter_scope('lstm1'):
-        h = lstm(h, lstm_size, return_sequences=True)
+        h = lstm(h, lstm_size, mask=mask, return_sequences=True)
     with nn.parameter_scope('lstm2'):
-        h = lstm(h, lstm_size, return_sequences=True)
+        h = lstm(h, lstm_size, mask=mask, return_sequences=True)
     with nn.parameter_scope('hidden'):
         h = time_distributed(PF.affine)(h, lstm_size)
     with nn.parameter_scope('output'):
