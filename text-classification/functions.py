@@ -11,10 +11,10 @@ import nnabla.functions as F
 import nnabla.parametric_functions as PF
 import numpy as np
 
-def frobenius(x):
+def frobenius(x: nn.Variable) -> nn.Variable:
     return F.mean(F.sum(F.sum(x ** 2, axis=2), axis=1) ** 0.5)
 
-def batch_eye(batch_size, size):
+def batch_eye(batch_size: int, size: int) -> nn.Variable:
     return F.broadcast(F.reshape(F.matrix_diag(F.constant(1, shape=(size,))), shape=(1, size, size)), shape=(batch_size, size, size))
 
 def get_mask(x: nn.Variable) -> nn.Variable:
@@ -24,7 +24,7 @@ def get_mask(x: nn.Variable) -> nn.Variable:
     return mask
 
 def get_attention_logit_mask(mask: nn.Variable) -> nn.Variable:
-    bit_inverted: nn.Variable = F.constant(1, shape=mask.shape) - mask
+    bit_inverted = F.constant(1, shape=mask.shape) - mask
     # -> (batch_size, memory_length, 1)
     bit_inverted = F.transpose(bit_inverted, (0, 2, 1))
     # -> (batch_size, 1, memory_length)
@@ -72,10 +72,10 @@ def time_distributed_softmax_cross_entropy(y_pred, y_true):
     '''
     A time distributed softmax crossentropy
     Args:
-        y_pred (nnabla.Variable): A shape of [B, SentenceLength, O]. # one-hot
-        y_true (nnabla.Variable): A shape of [B, SentenceLength, 1]. # index
+        y_pred (nnabla.Variable): A shape of [batch_size, length, number_of_outputs]. # one-hot
+        y_true (nnabla.Variable): A shape of [batch_size, length, 1]. # index
     Returns:
-        nn.Variable: A shape [B, SentenceLength].
+        nn.Variable: A shape [batch_size, length].
     '''
     ret = []
     for y_p, y_t in zip(F.split(y_pred, axis=1), F.split(y_true, axis=1)):
