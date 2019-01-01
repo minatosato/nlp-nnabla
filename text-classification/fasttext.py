@@ -112,6 +112,11 @@ loss = F.mean(F.binary_cross_entropy(y, t))
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
+from trainer import Trainer
+
+trainer = Trainer(inputs=[x, t], loss=loss, metrics={'cross entropy': loss, 'accuracy': accuracy}, solver=solver)
+trainer.run(train_data_iter, dev_data_iter, epochs=5, verbose=1)
+
 # Create monitor.
 from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
 monitor = Monitor('./tmp-fasttext')
