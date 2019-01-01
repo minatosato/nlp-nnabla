@@ -49,30 +49,30 @@ vocab_size: int = 20000
 
 x_train, x_test, y_train, y_test = load_imdb(vocab_size)
 
-# def get_bigram(sentence):
-#     return list(zip(sentence[:len(sentence)-1], sentence[1:]))
+def get_bigram(sentence):
+    return list(zip(sentence[:len(sentence)-1], sentence[1:]))
 
-# bigram_dict: dict = dict()
-# bigram_index = vocab_size
+bigram_dict: dict = dict()
+bigram_index = vocab_size
 
-# print("making bigram dictionary...")
-# for sentence in tqdm(x_train):
-#     for bigram in set(get_bigram(sentence)):
-#         if bigram not in bigram_dict:
-#             bigram_dict[bigram] = bigram_index
-#             bigram_index += 1
+print("making bigram dictionary...")
+for sentence in tqdm(x_train):
+    for bigram in set(get_bigram(sentence)):
+        if bigram not in bigram_dict:
+            bigram_dict[bigram] = bigram_index
+            bigram_index += 1
 
-# vocab_size = bigram_index + 1
+vocab_size = bigram_index + 1
     
-# print("adding bigram to dataset..")
-# for i, sentence in enumerate(tqdm(x_train)):
-#     for bigram in get_bigram(sentence):
-#         if bigram in bigram_dict:
-#             x_train[i].append(bigram_dict[bigram])
-# for i, sentence in enumerate(tqdm(x_test)):
-#     for bigram in get_bigram(sentence):
-#         if bigram in bigram_dict:
-#             x_test[i].append(bigram_dict[bigram])
+print("adding bigram to dataset..")
+for i, sentence in enumerate(tqdm(x_train)):
+    for bigram in get_bigram(sentence):
+        if bigram in bigram_dict:
+            x_train[i].append(bigram_dict[bigram])
+for i, sentence in enumerate(tqdm(x_test)):
+    for bigram in get_bigram(sentence):
+        if bigram in bigram_dict:
+            x_test[i].append(bigram_dict[bigram])
 
 x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
 x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)

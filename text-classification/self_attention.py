@@ -54,10 +54,10 @@ l2_penalty_coef: float = 1e-4
 
 x_train, x_test, y_train, y_test = load_imdb(vocab_size)
 
-x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
-x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)
-y_train = y_train[:, None]
-y_test = y_test[:, None]
+x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)[:100]
+x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)[:100]
+y_train = y_train[:, None][:100]
+y_test = y_test[:, None][:100]
 
 num_train_batch = len(x_train)//batch_size
 num_dev_batch = len(x_test)//batch_size
@@ -105,51 +105,64 @@ def build_self_attention_model(train=True):
 
     accuracy = F.mean(F.equal(F.round(y), t))
     loss = F.mean(F.binary_cross_entropy(y, t)) + attention_penalty_coef * frobenius(F.batch_matmul(a, a, transpose_a=True) - batch_eye(batch_size, r))
-    return x, y, t, accuracy, loss
+    return x, t, accuracy, loss
 
 # Create solver.
-x, y, t, accuracy, loss = build_self_attention_model(train=True)
+x, t, accuracy, loss = build_self_attention_model(train=True)
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
-# Create monitor.
-from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-self_attention')
-ce_train = MonitorSeries('ce_train', monitor, interval=1)
-ce_dev = MonitorSeries('ce_dev', monitor, interval=1)
+from trainer import Trainer
 
+trainer = Trainer(inputs=[x, t], loss=loss, metrics={'cross entropy': loss, 'accuracy': accuracy}, solver=solver)
 for epoch in range(max_epoch):
-    train_loss_set = []
-    train_acc_set = []
-    progress = tqdm(total=train_data_iter.size//batch_size)
-    x, y, t, accuracy, loss = build_self_attention_model(train=True)
-    for i in range(num_train_batch):
-        x.d, t.d = train_data_iter.next()
-        loss.forward()
-        accuracy.forward()
-        solver.zero_grad()
-        loss.backward()
-        solver.weight_decay(l2_penalty_coef)
-        solver.update()
-        train_loss_set.append(loss.d.copy())
-        train_acc_set.append(accuracy.d.copy())
+    # x, t, accuracy, loss = build_self_attention_model(train=True)
+    trainer.update_variables(inputs=[x, t], metrics={'cross entropy': loss, 'accuracy': accuracy})
+    trainer.run(train_data_iter, None, epochs=1, verbose=1)
+    
+    # x, t, accuracy, loss = build_self_attention_model(train=False)
+    trainer.update_variables(inputs=[x, t], metrics={'cross entropy': loss, 'accuracy': accuracy})
+    trainer.evaluate(dev_data_iter, verbose=1)
 
-        progress.set_description(f"epoch: {epoch+1}, train cross entropy: {np.mean(train_loss_set):.5f}, train accuracy: {np.mean(train_acc_set):.5f}")
-        progress.update(1)
-    progress.close()
 
-    dev_loss_set = []
-    dev_acc_set = []
-    x, y, t, accuracy, loss = build_self_attention_model(train=False)
-    for i in range(num_dev_batch):
-        x.d, t.d = dev_data_iter.next()
-        loss.forward()
-        accuracy.forward()
-        dev_loss_set.append(loss.d.copy())
-        dev_acc_set.append(accuracy.d.copy())
-    print(f"epoch: {epoch+1}, test accuracy: {np.mean(dev_acc_set):.5f}")
-    ce_train.add(epoch+1, train_loss_set)
-    ce_dev.add(epoch+1, dev_loss_set)
+# # Create monitor.
+# from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
+# monitor = Monitor('./tmp-self_attention')
+# ce_train = MonitorSeries('ce_train', monitor, interval=1)
+# ce_dev = MonitorSeries('ce_dev', monitor, interval=1)
+
+# for epoch in range(max_epoch):
+#     train_loss_set = []
+#     train_acc_set = []
+#     progress = tqdm(total=train_data_iter.size//batch_size)
+#     x, y, t, accuracy, loss = build_self_attention_model(train=True)
+#     for i in range(num_train_batch):
+#         x.d, t.d = train_data_iter.next()
+#         loss.forward()
+#         accuracy.forward()
+#         solver.zero_grad()
+#         loss.backward()
+#         solver.weight_decay(l2_penalty_coef)
+#         solver.update()
+#         train_loss_set.append(loss.d.copy())
+#         train_acc_set.append(accuracy.d.copy())
+
+#         progress.set_description(f"epoch: {epoch+1}, train cross entropy: {np.mean(train_loss_set):.5f}, train accuracy: {np.mean(train_acc_set):.5f}")
+#         progress.update(1)
+#     progress.close()
+
+#     dev_loss_set = []
+#     dev_acc_set = []
+#     x, y, t, accuracy, loss = build_self_attention_model(train=False)
+#     for i in range(num_dev_batch):
+#         x.d, t.d = dev_data_iter.next()
+#         loss.forward()
+#         accuracy.forward()
+#         dev_loss_set.append(loss.d.copy())
+#         dev_acc_set.append(accuracy.d.copy())
+#     print(f"epoch: {epoch+1}, test accuracy: {np.mean(dev_acc_set):.5f}")
+#     ce_train.add(epoch+1, train_loss_set)
+#     ce_dev.add(epoch+1, dev_loss_set)
 
 
 
