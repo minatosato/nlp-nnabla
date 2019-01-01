@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2018 Minato Sato
+# Copyright (c) 2017-2019 Minato Sato
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
@@ -49,30 +49,30 @@ vocab_size: int = 20000
 
 x_train, x_test, y_train, y_test = load_imdb(vocab_size)
 
-def get_bigram(sentence):
-    return list(zip(sentence[:len(sentence)-1], sentence[1:]))
+# def get_bigram(sentence):
+#     return list(zip(sentence[:len(sentence)-1], sentence[1:]))
 
-bigram_dict: dict = dict()
-bigram_index = vocab_size
+# bigram_dict: dict = dict()
+# bigram_index = vocab_size
 
-print("making bigram dictionary...")
-for sentence in tqdm(x_train):
-    for bigram in set(get_bigram(sentence)):
-        if bigram not in bigram_dict:
-            bigram_dict[bigram] = bigram_index
-            bigram_index += 1
+# print("making bigram dictionary...")
+# for sentence in tqdm(x_train):
+#     for bigram in set(get_bigram(sentence)):
+#         if bigram not in bigram_dict:
+#             bigram_dict[bigram] = bigram_index
+#             bigram_index += 1
 
-vocab_size = bigram_index + 1
+# vocab_size = bigram_index + 1
     
-print("adding bigram to dataset..")
-for i, sentence in enumerate(tqdm(x_train)):
-    for bigram in get_bigram(sentence):
-        if bigram in bigram_dict:
-            x_train[i].append(bigram_dict[bigram])
-for i, sentence in enumerate(tqdm(x_test)):
-    for bigram in get_bigram(sentence):
-        if bigram in bigram_dict:
-            x_test[i].append(bigram_dict[bigram])
+# print("adding bigram to dataset..")
+# for i, sentence in enumerate(tqdm(x_train)):
+#     for bigram in get_bigram(sentence):
+#         if bigram in bigram_dict:
+#             x_train[i].append(bigram_dict[bigram])
+# for i, sentence in enumerate(tqdm(x_test)):
+#     for bigram in get_bigram(sentence):
+#         if bigram in bigram_dict:
+#             x_test[i].append(bigram_dict[bigram])
 
 x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
 x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)
@@ -117,41 +117,41 @@ from trainer import Trainer
 trainer = Trainer(inputs=[x, t], loss=loss, metrics={'cross entropy': loss, 'accuracy': accuracy}, solver=solver)
 trainer.run(train_data_iter, dev_data_iter, epochs=5, verbose=1)
 
-# Create monitor.
-from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-fasttext')
-ce_train = MonitorSeries('ce_train', monitor, interval=1)
-ce_dev = MonitorSeries('ce_dev', monitor, interval=1)
+# # Create monitor.
+# from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
+# monitor = Monitor('./tmp-fasttext')
+# ce_train = MonitorSeries('ce_train', monitor, interval=1)
+# ce_dev = MonitorSeries('ce_dev', monitor, interval=1)
 
-for epoch in range(max_epoch):
-    train_loss_set = []
-    train_acc_set = []
-    progress = tqdm(total=train_data_iter.size//batch_size)
-    for i in range(num_train_batch):
-        x.d, t.d = train_data_iter.next()
-        loss.forward()
-        accuracy.forward()
-        solver.zero_grad()
-        loss.backward()
-        solver.update()
-        train_loss_set.append(loss.d.copy())
-        train_acc_set.append(accuracy.d.copy())
+# for epoch in range(max_epoch):
+#     train_loss_set = []
+#     train_acc_set = []
+#     progress = tqdm(total=train_data_iter.size//batch_size)
+#     for i in range(num_train_batch):
+#         x.d, t.d = train_data_iter.next()
+#         loss.forward()
+#         accuracy.forward()
+#         solver.zero_grad()
+#         loss.backward()
+#         solver.update()
+#         train_loss_set.append(loss.d.copy())
+#         train_acc_set.append(accuracy.d.copy())
 
-        progress.set_description(f"epoch: {epoch+1}, train cross entropy: {np.mean(train_loss_set):.5f}, train accuracy: {np.mean(train_acc_set):.5f}")
-        progress.update(1)
-    progress.close()
+#         progress.set_description(f"epoch: {epoch+1}, train cross entropy: {np.mean(train_loss_set):.5f}, train accuracy: {np.mean(train_acc_set):.5f}")
+#         progress.update(1)
+#     progress.close()
 
-    dev_loss_set = []
-    dev_acc_set = []
-    for i in range(num_dev_batch):
-        x.d, t.d = dev_data_iter.next()
-        loss.forward()
-        accuracy.forward()
-        dev_loss_set.append(loss.d.copy())
-        dev_acc_set.append(accuracy.d.copy())
-    print(f"epoch: {epoch+1}, test accuracy: {np.mean(dev_acc_set):.5f}")
-    ce_train.add(epoch+1, train_loss_set)
-    ce_dev.add(epoch+1, dev_loss_set)
+#     dev_loss_set = []
+#     dev_acc_set = []
+#     for i in range(num_dev_batch):
+#         x.d, t.d = dev_data_iter.next()
+#         loss.forward()
+#         accuracy.forward()
+#         dev_loss_set.append(loss.d.copy())
+#         dev_acc_set.append(accuracy.d.copy())
+#     print(f"epoch: {epoch+1}, test accuracy: {np.mean(dev_acc_set):.5f}")
+#     ce_train.add(epoch+1, train_loss_set)
+#     ce_dev.add(epoch+1, dev_loss_set)
 
 
 
