@@ -54,10 +54,10 @@ l2_penalty_coef: float = 1e-4
 
 x_train, x_test, y_train, y_test = load_imdb(vocab_size)
 
-x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)[:100]
-x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)[:100]
-y_train = y_train[:, None][:100]
-y_test = y_test[:, None][:100]
+x_train = with_padding(x_train, padding_type='post', max_sequence_length=max_len)
+x_test = with_padding(x_test, padding_type='post', max_sequence_length=max_len)
+y_train = y_train[:, None]
+y_test = y_test[:, None]
 
 num_train_batch = len(x_train)//batch_size
 num_dev_batch = len(x_test)//batch_size
@@ -114,14 +114,15 @@ solver.set_parameters(nn.get_parameters())
 
 from trainer import Trainer
 
+x, t, accuracy, loss = build_self_attention_model(train=True)
 trainer = Trainer(inputs=[x, t], loss=loss, metrics={'cross entropy': loss, 'accuracy': accuracy}, solver=solver)
 for epoch in range(max_epoch):
-    # x, t, accuracy, loss = build_self_attention_model(train=True)
-    trainer.update_variables(inputs=[x, t], metrics={'cross entropy': loss, 'accuracy': accuracy})
+    x, t, accuracy, loss = build_self_attention_model(train=True)
+    trainer.update_variables(inputs=[x, t], loss=loss, metrics={'cross entropy': loss, 'accuracy': accuracy})
     trainer.run(train_data_iter, None, epochs=1, verbose=1)
     
-    # x, t, accuracy, loss = build_self_attention_model(train=False)
-    trainer.update_variables(inputs=[x, t], metrics={'cross entropy': loss, 'accuracy': accuracy})
+    x, t, accuracy, loss = build_self_attention_model(train=False)
+    trainer.update_variables(inputs=[x, t], loss=loss, metrics={'cross entropy': loss, 'accuracy': accuracy})
     trainer.evaluate(dev_data_iter, verbose=1)
 
 

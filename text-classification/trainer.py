@@ -29,8 +29,9 @@ class Trainer(object):
         self.solver: S.Solver = solver
         self.current_epoch: int = 0
     
-    def update_variables(self, inputs: List[nn.Variable], metrics: Dict[str, nn.Variable]):
+    def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable, metrics: Dict[str, nn.Variable]):
         self.inputs: List[nn.Variable] = inputs
+        self.loss: nn.Variable = loss
         self.metrics: Dict[str, nn.Variable] = metrics
     
     def run(self, train_iter: DataIterator, valid_iter: Optional[DataIterator], epochs: int, verbose=0) -> None:
@@ -48,7 +49,7 @@ class Trainer(object):
             self._run_one_epoch(num_train_batch, epoch, train_iter, train=True)
             if valid_iter is not None:
                 num_valid_batch = valid_iter.size // batch_size
-                self._run_one_epoch(num_valid_batch, epoch, valid_iter, train=False)
+                self._run_one_epoch(num_valid_batch, epoch, valid_iter, train=False, show_epoch=False)
             self.current_epoch += 1
     
     def evaluate(self, valid_iter: DataIterator, verbose=0) -> None:
@@ -58,7 +59,7 @@ class Trainer(object):
         assert valid_iter.batch_size == batch_size
 
         num_valid_batch = valid_iter.size // batch_size
-        self._run_one_epoch(num_valid_batch, self.current_epoch-1, valid_iter, train=False)
+        self._run_one_epoch(num_valid_batch, self.current_epoch-1, valid_iter, train=False, show_epoch=False)
 
     def _init_metrics_logger(self) -> Dict[str, List[float]]:
         logger: Dict[str, List[float]] = dict()
@@ -66,7 +67,7 @@ class Trainer(object):
             logger[key] = []
         return logger
 
-    def _run_one_epoch(self, num_batch:int, epoch: int, iterator: DataIterator, train: bool):
+    def _run_one_epoch(self, num_batch:int, epoch: int, iterator: DataIterator, train: bool, show_epoch=True):
         metrics_logger = self._init_metrics_logger()
         progress = tqdm(total=num_batch)
 
@@ -93,7 +94,8 @@ class Trainer(object):
                 metrics_logger[key].append(self.metrics[key].d.copy())
             
             description_list = []
-            description_list.append(f"epoch: {epoch+1}")
+            if show_epoch:
+                description_list.append(f"epoch: {epoch+1}")
             for key in self.metrics:
                 description_list.append(f"{'train' if train else 'valid'} {key}: {np.mean(metrics_logger[key]):.5f}")
             progress.set_description(', '.join(description_list))
