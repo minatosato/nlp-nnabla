@@ -20,24 +20,28 @@ from tqdm import tqdm
 from typing import List
 from typing import Dict
 from typing import Optional
+from dataclasses import dataclass
+from dataclasses import field
 
-class Trainer(object):
-    def __init__(self, inputs: List[nn.Variable], loss: nn.Variable, metrics: Dict[str, nn.Variable], solver: S.Solver) -> None:
-        self.inputs: List[nn.Variable] = inputs
-        self.loss: nn.Variable = loss
-        self.metrics: Dict[str, nn.Variable] = metrics
-        self.solver: S.Solver = solver
-        self.current_epoch: int = 0
+@dataclass
+class Trainer:
+    inputs: List[nn.Variable]
+    loss: nn.Variable
+    metrics: Dict[str, nn.Variable]
+    solver: S.Solver
+    current_epoch: int = 0
     
     def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable, metrics: Dict[str, nn.Variable]):
         self.inputs: List[nn.Variable] = inputs
         self.loss: nn.Variable = loss
         self.metrics: Dict[str, nn.Variable] = metrics
     
-    def run(self, train_iter: DataIterator, valid_iter: Optional[DataIterator], epochs: int, verbose=0) -> None:
-        assert len(train_iter.variables) == len(self.inputs)
+    def run(self, train_iter: DataIterator, valid_iter: Optional[DataIterator] = None, epochs: int = 5, verbose=0) -> None:
+        assert len(train_iter.variables) == len(self.inputs), \
+              'the number of varibales received from iterator must be equal to the number of input variables'
         if valid_iter is not None:
-            assert len(valid_iter.variables) == len(self.inputs)
+            assert len(valid_iter.variables) == len(self.inputs), \
+                  'the number of varibales received from iterator must be equal to the number of input variables'
 
         batch_size = self.inputs[0].shape[0]
         assert train_iter.batch_size == batch_size

@@ -55,10 +55,10 @@ batch_size = 32
 max_epoch = 100
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
-y_train = train_data[:, 1:sentence_length+1].astype(np.int32)
+y_train = train_data[:, 1:sentence_length+1].astype(np.int32)[:, :, None]
 
 x_valid = valid_data[:, :sentence_length].astype(np.int32)
-y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)
+y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)[:, :, None]
 
 num_train_batch = len(x_train)//batch_size
 num_valid_batch = len(x_valid)//batch_size
@@ -93,44 +93,49 @@ loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
 solver = S.Momentum(1e-2, momentum=0.9)
 solver.set_parameters(nn.get_parameters())
 
-# Create monitor.
-from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-rnnlm')
-monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
-monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
+from trainer import Trainer
+
+trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver)
+trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
+
+# # Create monitor.
+# from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
+# monitor = Monitor('./tmp-rnnlm')
+# monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
+# monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 
 
-for epoch in range(max_epoch):
-    train_loss_set = []
-    progress = tqdm(total=train_data_iter.size//batch_size)
-    for i in range(num_train_batch):
-        x_batch, y_batch = train_data_iter.next()
-        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
+# for epoch in range(max_epoch):
+#     train_loss_set = []
+#     progress = tqdm(total=train_data_iter.size//batch_size)
+#     for i in range(num_train_batch):
+#         x_batch, y_batch = train_data_iter.next()
+#         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
 
-        x.d, t.d = x_batch, y_batch
+#         x.d, t.d = x_batch, y_batch
 
-        solver.zero_grad()
-        loss.forward()
-        train_loss_set.append(loss.d.copy())
-        loss.backward()
-        solver.update()
+#         solver.zero_grad()
+#         loss.forward()
+#         train_loss_set.append(loss.d.copy())
+#         loss.backward()
+#         solver.update()
 
-        progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
-        progress.update(1)
-    progress.close()
+#         progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
+#         progress.update(1)
+#     progress.close()
 
-    valid_loss_set = []
-    for i in range(num_valid_batch):
-        x_batch, y_batch = valid_data_iter.next()
-        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
+#     valid_loss_set = []
+#     for i in range(num_valid_batch):
+#         x_batch, y_batch = valid_data_iter.next()
+#         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
 
-        x.d, t.d = x_batch, y_batch
+#         x.d, t.d = x_batch, y_batch
 
-        loss.forward(clear_no_need_grad=True)
-        valid_loss_set.append(loss.d.copy())
+#         loss.forward(clear_no_need_grad=True)
+#         valid_loss_set.append(loss.d.copy())
 
-    monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
-    monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
+#     monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
+#     monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
 
 
 
