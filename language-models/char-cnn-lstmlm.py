@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2017-2018 Minato Sato
+# Copyright (c) 2017-2019 Minato Sato
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
@@ -22,6 +22,7 @@ from parametric_functions import lstm
 from parametric_functions import highway
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
+from functions import expand_dims
 
 from utils import load_data
 from utils import wordseq2charseq
@@ -86,6 +87,7 @@ dropout_ratio = 0.5
 def build_model(train=True, get_embeddings=False):
     x = nn.Variable((batch_size, sentence_length, word_length))
     mask = F.reshape(F.sign(x), shape=(batch_size, sentence_length, word_length, 1))
+    t = nn.Variable((batch_size, sentence_length))
 
     with nn.parameter_scope('char_embedding'):
         h = PF.embed(x, char_vocab_size, char_embedding_dim) * mask
@@ -119,10 +121,9 @@ def build_model(train=True, get_embeddings=False):
         h = F.dropout(h, p=dropout_ratio)
     with nn.parameter_scope('output'):
         y = time_distributed(PF.affine)(h, word_vocab_size)
-    t = nn.Variable((batch_size, sentence_length, 1))
 
-    mask = F.sum(F.sign(t), axis=2) # do not predict 'pad'.
-    entropy = time_distributed_softmax_cross_entropy(y, t) * mask
+    mask = F.sign(t) # do not predict 'pad'.
+    entropy = time_distributed_softmax_cross_entropy(y, expand_dims(t, axis=-1)) * mask
     count = F.sum(mask, axis=1)
     loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
     return x, t, loss
@@ -139,89 +140,61 @@ monitor = Monitor('./tmp-char-cnn-lstm')
 monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
 monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 
-best_dev_loss = 9999
+from trainer import Trainer
+
+x, t, loss = build_model(train=True)
+trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver, save_path='char-cnn-lstmlm')
+trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
 
 for epoch in range(max_epoch):
-    train_loss_set = []
-    progress = tqdm(total=train_data_iter.size//batch_size)
-    x, t, loss = build_model()
-    for i in range(num_train_batch):
-        x_batch, y_batch = train_data_iter.next()
-        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
-
-        x.d, t.d = x_batch, y_batch
-
-        solver.zero_grad()
-        loss.forward()
-        train_loss_set.append(loss.d.copy())
-        loss.backward()
-        solver.weight_decay(1e-5)
-        solver.update()
-
-        progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
-        progress.update(1)
-    progress.close()
-
-    dev_loss_set = []
+    x, t, loss = build_model(train=True)
+    trainer.update_variables(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss})
+    trainer.run(train_data_iter, None, epochs=1, verbose=1)
+    
     x, t, loss = build_model(train=False)
-    for i in range(num_valid_batch):
-        x_batch, y_batch = valid_data_iter.next()
-        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
+    trainer.update_variables(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss})
+    trainer.evaluate(valid_data_iter, verbose=1)
 
-        x.d, t.d = x_batch, y_batch
+# nn.load_parameters('char-cnn-lstm_best.h5')
 
-        loss.forward(clear_no_need_grad=True)
-        dev_loss_set.append(loss.d.copy())
+# batch_size = 1
+# sentence_length = 1
+# x, embeddings = build_model(get_embeddings=True)
 
-    monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
-    monitor_perplexity_valid.add(epoch+1, np.e**np.mean(dev_loss_set))
+# W = np.zeros((len(w2i), sum(filters)))
+# for i, word in enumerate(w2i):
+#     vec = wordseq2charseq([[w2i[word]]])
+#     x.d = vec
+#     embeddings.forward(clear_no_need_grad=True)
+#     W[w2i[word], :] = embeddings.d[0][0]
 
-    dev_loss = np.e**np.mean(dev_loss_set)
-    if best_dev_loss > dev_loss:
-        best_dev_loss = dev_loss
-        print('best dev loss updated! {}'.format(dev_loss))
-        nn.save_parameters('char-cnn-lstm_best.h5')
+# def get_word_from_id(id):
+#     return i2w[id]
 
-nn.load_parameters('char-cnn-lstm_best.h5')
+# from sklearn.metrics.pairwise import cosine_similarity
 
-batch_size = 1
-sentence_length = 1
-x, embeddings = build_model(get_embeddings=True)
+# def get_top_k(word, k=5):
+#     global W
+#     if word not in w2i:
+#         w2i[word] = len(w2i)
+#         i2w[w2i[word]] = word
+#         W = np.zeros((len(w2i), sum(filters)))
+#         for i, w in enumerate(w2i):
+#             vec = wordseq2charseq([[w2i[w]]])
+#             x.d = vec
+#             embeddings.forward()
+#             W[w2i[w], :] = embeddings.d[0][0]
+#     cosine_similarity_set = cosine_similarity([W[w2i[word]]], W)[0]
+#     top_k = cosine_similarity_set.argsort()[-(k+1):-1][::-1]
+#     return list(map(get_word_from_id, top_k))
 
-W = np.zeros((len(w2i), sum(filters)))
-for i, word in enumerate(w2i):
-    vec = wordseq2charseq([[w2i[word]]])
-    x.d = vec
-    embeddings.forward(clear_no_need_grad=True)
-    W[w2i[word], :] = embeddings.d[0][0]
+# search_words = ['while', 'his', 'you', 'richard', 'trading', 'computer-aided', 'misinformed', 'looooook']
 
-def get_word_from_id(id):
-    return i2w[id]
-
-from sklearn.metrics.pairwise import cosine_similarity
-
-def get_top_k(word, k=5):
-    global W
-    if word not in w2i:
-        w2i[word] = len(w2i)
-        i2w[w2i[word]] = word
-        W = np.zeros((len(w2i), sum(filters)))
-        for i, w in enumerate(w2i):
-            vec = wordseq2charseq([[w2i[w]]])
-            x.d = vec
-            embeddings.forward()
-            W[w2i[w], :] = embeddings.d[0][0]
-    cosine_similarity_set = cosine_similarity([W[w2i[word]]], W)[0]
-    top_k = cosine_similarity_set.argsort()[-(k+1):-1][::-1]
-    return list(map(get_word_from_id, top_k))
-
-search_words = ['while', 'his', 'you', 'richard', 'trading', 'computer-aided', 'misinformed', 'looooook']
-
-for query in search_words:
-    print("----------------")
-    print(query + ' -> ', end='')
-    print(get_top_k(query))
-print("----------------")
+# for query in search_words:
+#     print("----------------")
+#     print(query + ' -> ', end='')
+#     print(get_top_k(query))
+# print("----------------")
 
 
 

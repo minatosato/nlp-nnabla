@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2017-2018 Minato Sato
+# Copyright (c) 2017-2019 Minato Sato
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
@@ -97,50 +97,5 @@ solver.set_parameters(nn.get_parameters())
 
 from trainer import Trainer
 
-trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver)
+trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver, save_path='lstmlm')
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
-
-# # Create monitor.
-# from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-# monitor = Monitor('./tmp-lstmlm')
-# monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
-# monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
-
-
-# for epoch in range(max_epoch):
-#     train_loss_set = []
-#     progress = tqdm(total=train_data_iter.size//batch_size)
-#     for i in range(num_train_batch):
-#         x_batch, y_batch = train_data_iter.next()
-#         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
-
-#         x.d, t.d = x_batch, y_batch
-
-#         solver.zero_grad()
-#         loss.forward()
-#         train_loss_set.append(loss.d.copy())
-#         loss.backward()
-#         solver.update()
-
-#         progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
-#         progress.update(1)
-#     progress.close()
-
-#     valid_loss_set = []
-#     for i in range(num_valid_batch):
-#         x_batch, y_batch = valid_data_iter.next()
-#         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
-
-#         x.d, t.d = x_batch, y_batch
-
-#         loss.forward(clear_no_need_grad=True)
-#         valid_loss_set.append(loss.d.copy())
-
-#     monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
-#     monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
-
-
-
-
-
-
