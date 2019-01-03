@@ -22,6 +22,7 @@ from parametric_functions import lstm
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 from functions import get_mask
+from functions import expand_dims
 
 from utils import load_data
 from utils import wordseq2charseq
@@ -75,7 +76,7 @@ valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size
 
 x = nn.Variable((batch_size, sentence_length))
 mask = get_mask(x)
-t = nn.Variable((batch_size, sentence_length, 1))
+t = nn.Variable((batch_size, sentence_length))
 
 with nn.parameter_scope('embedding'):
     h = PF.embed(x, vocab_size, embedding_size) * mask
@@ -85,7 +86,7 @@ with nn.parameter_scope('output'):
     y = time_distributed(PF.affine)(h, vocab_size)
 
 mask = F.sum(mask, axis=2) # do not predict 'pad'.
-entropy = time_distributed_softmax_cross_entropy(y, t) * mask
+entropy = time_distributed_softmax_cross_entropy(y, expand_dims(t, axis=-1)) * mask
 count = F.sum(mask, axis=1)
 loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
 
@@ -93,44 +94,50 @@ loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
 solver = S.Momentum(1e-2, momentum=0.9)
 solver.set_parameters(nn.get_parameters())
 
-# Create monitor.
-from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-lstmlm')
-monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
-monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
+
+from trainer import Trainer
+
+trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver)
+trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
+
+# # Create monitor.
+# from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
+# monitor = Monitor('./tmp-lstmlm')
+# monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
+# monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 
 
-for epoch in range(max_epoch):
-    train_loss_set = []
-    progress = tqdm(total=train_data_iter.size//batch_size)
-    for i in range(num_train_batch):
-        x_batch, y_batch = train_data_iter.next()
-        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
+# for epoch in range(max_epoch):
+#     train_loss_set = []
+#     progress = tqdm(total=train_data_iter.size//batch_size)
+#     for i in range(num_train_batch):
+#         x_batch, y_batch = train_data_iter.next()
+#         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
 
-        x.d, t.d = x_batch, y_batch
+#         x.d, t.d = x_batch, y_batch
 
-        solver.zero_grad()
-        loss.forward()
-        train_loss_set.append(loss.d.copy())
-        loss.backward()
-        solver.update()
+#         solver.zero_grad()
+#         loss.forward()
+#         train_loss_set.append(loss.d.copy())
+#         loss.backward()
+#         solver.update()
 
-        progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
-        progress.update(1)
-    progress.close()
+#         progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
+#         progress.update(1)
+#     progress.close()
 
-    valid_loss_set = []
-    for i in range(num_valid_batch):
-        x_batch, y_batch = valid_data_iter.next()
-        y_batch = y_batch.reshape(list(y_batch.shape) + [1])
+#     valid_loss_set = []
+#     for i in range(num_valid_batch):
+#         x_batch, y_batch = valid_data_iter.next()
+#         y_batch = y_batch.reshape(list(y_batch.shape) + [1])
 
-        x.d, t.d = x_batch, y_batch
+#         x.d, t.d = x_batch, y_batch
 
-        loss.forward(clear_no_need_grad=True)
-        valid_loss_set.append(loss.d.copy())
+#         loss.forward(clear_no_need_grad=True)
+#         valid_loss_set.append(loss.d.copy())
 
-    monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
-    monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
+#     monitor_perplexity.add(epoch+1, np.e**np.mean(train_loss_set))
+#     monitor_perplexity_valid.add(epoch+1, np.e**np.mean(valid_loss_set))
 
 
 

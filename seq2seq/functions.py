@@ -11,6 +11,16 @@ import nnabla.functions as F
 import nnabla.parametric_functions as PF
 import numpy as np
 
+def expand_dims(x: nn.Variable, axis: int) -> nn.Variable:
+    shape = list(x.shape)
+    assert len(shape) >= axis >= -1
+    if axis == -1:
+        shape = shape + [1]
+    else:
+        shape.insert(axis, 1)
+    ret = F.reshape(x, shape=shape)
+    return ret
+
 def frobenius(x: nn.Variable) -> nn.Variable:
     return F.mean(F.sum(F.sum(x ** 2, axis=2), axis=1) ** 0.5)
 
@@ -68,7 +78,7 @@ def time_distributed(func):
     return time_distributed_func
 
 
-def time_distributed_softmax_cross_entropy(y_pred, y_true):
+def time_distributed_softmax_cross_entropy(y_pred: nn.Variable, y_true: nn.Variable) -> nn.Variable:
     '''
     A time distributed softmax crossentropy
     Args:

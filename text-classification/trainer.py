@@ -27,14 +27,20 @@ from dataclasses import field
 class Trainer:
     inputs: List[nn.Variable]
     loss: nn.Variable
-    metrics: Dict[str, nn.Variable]
     solver: S.Solver
+    metrics: Dict[str, nn.Variable] = field(default_factory=dict)
     current_epoch: int = 0
+
+    def __post_init__(self):
+        if len(self.metrics) == 0:
+            self.metrics['loss'] = self.loss
     
-    def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable, metrics: Dict[str, nn.Variable]):
+    def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable, metrics: Dict[str, nn.Variable] = {}):
         self.inputs: List[nn.Variable] = inputs
         self.loss: nn.Variable = loss
         self.metrics: Dict[str, nn.Variable] = metrics
+
+        self.__post_init__()
     
     def run(self, train_iter: DataIterator, valid_iter: Optional[DataIterator] = None, epochs: int = 5, verbose=0) -> None:
         assert len(train_iter.variables) == len(self.inputs), \
@@ -73,36 +79,34 @@ class Trainer:
 
     def _run_one_epoch(self, num_batch:int, epoch: int, iterator: DataIterator, train: bool, show_epoch=True):
         metrics_logger = self._init_metrics_logger()
-        progress = tqdm(total=num_batch)
-
-        for i in range(num_batch):
-            # set data to variable
-            for variable, data in zip(self.inputs, iterator.next()):
-                variable.d = data
-            
-            for metric in list(self.metrics.values()):
-                metric.forward()
-            
-            if train:
-                loss_forward = True
+        
+        with tqdm(total=num_batch) as progress:
+            for i in range(num_batch):
+                # set data to variable
+                for variable, data in zip(self.inputs, iterator.next()):
+                    variable.d = data
+                
                 for metric in list(self.metrics.values()):
-                    if metric is self.loss:
-                        loss_forward = False
-                if loss_forward:
-                    self.loss.forward()
-                self.solver.zero_grad()
-                self.loss.backward()
-                self.solver.update()
-            
-            for key in self.metrics:
-                metrics_logger[key].append(self.metrics[key].d.copy())
-            
-            description_list = []
-            if show_epoch:
-                description_list.append(f"epoch: {epoch+1}")
-            for key in self.metrics:
-                description_list.append(f"{'train' if train else 'valid'} {key}: {np.mean(metrics_logger[key]):.5f}")
-            progress.set_description(', '.join(description_list))
-            progress.update(1)
-
-        progress.close()
+                    metric.forward()
+                
+                if train:
+                    loss_forward = True
+                    for metric in list(self.metrics.values()):
+                        if metric is self.loss:
+                            loss_forward = False
+                    if loss_forward:
+                        self.loss.forward()
+                    self.solver.zero_grad()
+                    self.loss.backward()
+                    self.solver.update()
+                
+                for key in self.metrics:
+                    metrics_logger[key].append(self.metrics[key].d.copy())
+                
+                description_list = []
+                if show_epoch:
+                    description_list.append(f"epoch: {epoch+1}")
+                for key in self.metrics:
+                    description_list.append(f"{'train' if train else 'valid'} {key}: {np.mean(metrics_logger[key]):.5f}")
+                progress.set_description(', '.join(description_list))
+                progress.update(1)

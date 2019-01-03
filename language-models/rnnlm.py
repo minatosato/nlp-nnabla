@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2017-2018 Minato Sato
+# Copyright (c) 2017-2019 Minato Sato
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
@@ -23,6 +23,7 @@ from parametric_functions import simple_rnn
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 from functions import get_mask
+from functions import expand_dims
 
 from utils import load_data
 from utils import w2i, i2w, c2i, i2c, word_length
@@ -55,10 +56,10 @@ batch_size = 32
 max_epoch = 100
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
-y_train = train_data[:, 1:sentence_length+1].astype(np.int32)[:, :, None]
+y_train = train_data[:, 1:sentence_length+1].astype(np.int32)
 
 x_valid = valid_data[:, :sentence_length].astype(np.int32)
-y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)[:, :, None]
+y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)
 
 num_train_batch = len(x_train)//batch_size
 num_valid_batch = len(x_valid)//batch_size
@@ -74,18 +75,16 @@ valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size
 
 x = nn.Variable((batch_size, sentence_length))
 mask = get_mask(x)
-t = nn.Variable((batch_size, sentence_length, 1))
+t = nn.Variable((batch_size, sentence_length))
 with nn.parameter_scope('embedding'):
     h = time_distributed(PF.embed)(x, vocab_size, embedding_size) * mask
-with nn.parameter_scope('rnn1'):
+with nn.parameter_scope('rnn'):
     h = simple_rnn(h, hidden_size, mask=mask, return_sequences=True)
-with nn.parameter_scope('hidden'):
-    h = time_distributed(PF.affine)(h, hidden_size)
 with nn.parameter_scope('output'):
     y = time_distributed(PF.affine)(h, vocab_size)
 
 mask = F.sum(mask, axis=2)
-entropy = time_distributed_softmax_cross_entropy(y, t) * mask
+entropy = time_distributed_softmax_cross_entropy(y, expand_dims(t, axis=-1)) * mask
 count = F.sum(mask, axis=1)
 loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
 
