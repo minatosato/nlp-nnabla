@@ -27,6 +27,7 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 @dataclass
 class Trainer:
@@ -67,17 +68,22 @@ class Trainer:
         for epoch in range(self.current_epoch, epochs+self.current_epoch):
             epoch_result = self._run_one_epoch(num_train_batch, epoch, train_iter, train=True)
             self.save_result(epoch_result)
+
             if valid_iter is not None:
                 num_valid_batch = valid_iter.size // batch_size
                 epoch_result = self._run_one_epoch(num_valid_batch, epoch, valid_iter, train=False, show_epoch=False)
                 self.save_result(epoch_result)
+
+            self.save_fig()
+            self.snapshot()
+
             self.current_epoch += 1
         
     def save_result(self, result: Dict[str, float]):
         for key in result:
             if key not in self.monitor_series:
                 self.monitor_series[key] = M.MonitorSeries(key, self.monitor, interval=1)
-            self.monitor_series[key].add(self.current_epoch, result[key])
+            self.monitor_series[key].add(self.current_epoch+1, result[key])
     
     def evaluate(self, valid_iter: DataIterator, verbose=0) -> None:
         assert len(valid_iter.variables) == len(self.inputs)
@@ -87,6 +93,30 @@ class Trainer:
 
         num_valid_batch = valid_iter.size // batch_size
         self._run_one_epoch(num_valid_batch, self.current_epoch-1, valid_iter, train=False, show_epoch=False)
+
+    def save_fig(self) -> None:
+        for metric in self.metrics:
+            label_train = f'{metric}-train'
+            if label_train in  list(self.monitor_series.keys()):
+                series_path = Path(self.save_path) / f'{label_train}.series.txt'
+                M.plot_series(series_path.as_posix(), plot_kwargs=dict(label=label_train))
+            label_valid = f'{metric}-valid'
+            if label_valid in  list(self.monitor_series.keys()):
+                series_path = Path(self.save_path) / f'{label_valid}.series.txt'
+                M.plot_series(series_path.as_posix(), plot_kwargs=dict(label=label_valid))
+            
+            if label_train in list(self.monitor_series.keys()) or label_valid in list(self.monitor_series.keys()):
+                plt.legend()
+                plt.xlabel('epochs')
+                plt.ylabel(metric)
+                plt.grid()
+                plt.savefig(Path(self.save_path) / f'{metric}.png')
+                plt.clf()
+    
+    def snapshot(self) -> None:
+        file_path = Path(self.save_path) / f'snapshot_epoch_{self.current_epoch+1}.h5'
+        nn.save_parameters(file_path.as_posix())
+            
 
     def _init_metrics_logger(self) -> Dict[str, List[float]]:
         logger: Dict[str, List[float]] = dict()
@@ -134,3 +164,4 @@ class Trainer:
             epoch_result[metric + '-' + ('train' if train else 'valid')] = np.mean(metrics_logger[metric])
 
         return epoch_result
+

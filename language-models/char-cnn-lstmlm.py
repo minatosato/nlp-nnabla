@@ -23,6 +23,7 @@ from parametric_functions import highway
 from functions import time_distributed
 from functions import time_distributed_softmax_cross_entropy
 from functions import expand_dims
+from functions import get_mask
 
 from utils import load_data
 from utils import wordseq2charseq
@@ -86,7 +87,7 @@ dropout_ratio = 0.5
 
 def build_model(train=True, get_embeddings=False):
     x = nn.Variable((batch_size, sentence_length, word_length))
-    mask = F.reshape(F.sign(x), shape=(batch_size, sentence_length, word_length, 1))
+    mask = expand_dims(F.sign(x), axis=-1)
     t = nn.Variable((batch_size, sentence_length))
 
     with nn.parameter_scope('char_embedding'):
@@ -100,8 +101,7 @@ def build_model(train=True, get_embeddings=False):
     h = F.concatenate(*output, axis=1)
     h = F.transpose(h, (0, 2, 1, 3))
 
-    mask = F.reshape(F.sign(F.sum(x, axis=2)), shape=(batch_size, sentence_length, 1, 1))
-    mask = F.sign(F.sum(x, axis=2, keepdims=True))
+    mask = get_mask(F.sum(x, axis=2))
     embeddings = F.reshape(h, (batch_size, sentence_length, sum(filters))) * mask
 
     if get_embeddings:
@@ -133,12 +133,6 @@ x, t, loss = build_model()
 # Create solver.
 solver = S.Momentum(1e-2, momentum=0.9)
 solver.set_parameters(nn.get_parameters())
-
-# Create monitor.
-from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-char-cnn-lstm')
-monitor_perplexity = MonitorSeries('perplexity', monitor, interval=1)
-monitor_perplexity_valid = MonitorSeries('perplexity_valid', monitor, interval=1)
 
 from trainer import Trainer
 

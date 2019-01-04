@@ -30,7 +30,7 @@ def batch_eye(batch_size: int, size: int) -> nn.Variable:
 def get_mask(x: nn.Variable) -> nn.Variable:
     assert len(x.shape) == 2
     batch_size, max_len = x.shape
-    mask = F.reshape(F.sign(x), shape=(batch_size, max_len, 1))
+    mask = expand_dims(F.sign(x), axis=-1)
     return mask
 
 def get_attention_logit_mask(mask: nn.Variable) -> nn.Variable:

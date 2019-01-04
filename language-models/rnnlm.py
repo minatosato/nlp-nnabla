@@ -54,7 +54,7 @@ sentence_length = 60
 embedding_size = 128
 hidden_size = 128
 batch_size = 32
-max_epoch = 100
+max_epoch = 30
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
 y_train = train_data[:, 1:sentence_length+1].astype(np.int32)
@@ -97,3 +97,4 @@ from trainer import Trainer
 
 trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver, save_path='rnnlm')
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
+trainer.save_fig()
