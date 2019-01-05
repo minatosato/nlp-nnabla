@@ -6,8 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from collections import OrderedDict
-import pickle
 import numpy as np
 
 import nnabla as nn

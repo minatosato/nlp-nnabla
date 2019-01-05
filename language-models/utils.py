@@ -17,6 +17,8 @@ i2c = {}
 
 w2i['pad'] = 0
 i2w[0] = 'pad'
+w2i['<eos>'] = 1
+i2w[1] = '<eos>'
 
 c2i[' '] = 0
 i2c[0] = ' '
@@ -24,9 +26,14 @@ i2c[0] = ' '
 word_length = 20
 
 
-def load_data(filename):
+def load_data(filename, with_bos=False):
     global w2i, i2w
     global c2i, i2c
+    
+    if with_bos:
+        w2i['<bos>'] = 2
+        i2w[2] = '<bos>'
+
     with open(filename) as f:
         lines = f.read().replace('\n', '<eos>')
         for char in set(lines):
@@ -47,6 +54,8 @@ def load_data(filename):
 
     sentences = []
     sentence = []
+    if with_bos:
+        sentence.append(w2i['<bos>'])
     for index in dataset:
         if i2w[index] != '<eos>':
             sentence.append(index)
@@ -54,6 +63,8 @@ def load_data(filename):
             sentence.append(index)
             sentences.append(sentence)
             sentence = []
+            if with_bos:
+                sentence.append(w2i['<bos>'])
     return sentences
 
 def wordseq2charseq(data):

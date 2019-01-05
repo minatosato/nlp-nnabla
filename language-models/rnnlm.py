@@ -6,9 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-
-from collections import OrderedDict
-import pickle
 import numpy as np
 
 import nnabla as nn
@@ -97,4 +94,4 @@ from trainer import Trainer
 
 trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver, save_path='rnnlm')
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
-trainer.save_fig()
+
