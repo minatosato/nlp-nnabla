@@ -128,7 +128,7 @@ class Trainer:
                        train: bool, show_epoch=True) -> Dict[str, float]:
         metrics_logger: Dict[str, List[float]] = self._init_metrics_logger()
         
-        with tqdm(total=num_batch) as progress:
+        with tqdm(total=num_batch, leave=False) as progress:
             for i in range(num_batch):
                 # set data to variable
                 for variable, data in zip(self.inputs, iterator.next()):

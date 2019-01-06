@@ -40,10 +40,10 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-train_data = load_data('./ptb/train.txt')
+train_data = load_data('./ptb/train.txt', with_bos=True)
 train_data = with_padding(train_data, padding_type='post')
 
-valid_data = load_data('./ptb/valid.txt')
+valid_data = load_data('./ptb/valid.txt', with_bos=True)
 valid_data = with_padding(valid_data, padding_type='post')
 
 vocab_size = len(w2i)

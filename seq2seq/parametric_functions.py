@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2017-2018 Minato Sato
+# Copyright (c) 2017-2019 Minato Sato
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
@@ -37,7 +37,7 @@ def simple_rnn(inputs: nn.Variable, units: int, mask: Optional[nn.Variable] = No
 
     hs = []
     batch_size, length, embedding_size = inputs.shape
-    h0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
+    h0 = F.constant(0, shape=(batch_size, units))
 
     h = h0
 
@@ -90,8 +90,8 @@ def lstm(inputs: nn.Variable, units: int, mask: Optional[nn.Variable] = None, in
     batch_size, length, embedding_size = inputs.shape
 
     if initial_state is None:
-        c0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
-        h0 = nn.Variable.from_numpy_array(np.zeros((batch_size, units)))
+        c0 = F.constant(0, shape=(batch_size, units))
+        h0 = F.constant(0, shape=(batch_size, units))
     else:
         assert type(initial_state) is tuple or type(initial_state) is list, \
                'initial_state must be a typle or a list.'

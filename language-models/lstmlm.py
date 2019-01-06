@@ -80,13 +80,16 @@ with nn.parameter_scope('embedding'):
     h = PF.embed(x, vocab_size, embedding_size) * mask
 with nn.parameter_scope('lstm1'):
     h = lstm(h, hidden_size, mask=mask, return_sequences=True)
+with nn.parameter_scope('lstm2'):
+    h = lstm(h, hidden_size, mask=mask, return_sequences=True)
 with nn.parameter_scope('output'):
     y = time_distributed(PF.affine)(h, vocab_size)
 
 mask = F.sum(mask, axis=2) # do not predict 'pad'.
 entropy = time_distributed_softmax_cross_entropy(y, expand_dims(t, axis=-1)) * mask
-count = F.sum(mask, axis=1)
-loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
+# count = F.sum(mask, axis=1)
+# loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
+loss = F.sum(entropy) / F.sum(mask)
 
 # Create solver.
 solver = S.Momentum(1e-2, momentum=0.9)

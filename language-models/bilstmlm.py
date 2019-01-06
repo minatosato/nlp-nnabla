@@ -28,7 +28,7 @@ from utils import w2i, i2w, c2i, i2c, word_length
 from utils import with_padding
 
 import argparse
-parser = argparse.ArgumentParser(description='LSTM language model training.')
+parser = argparse.ArgumentParser(description='Bi-directional LSTM language model training.')
 parser.add_argument('--context', '-c', type=str,
                     default='cpu', help='You can choose cpu or cudnn.')
 parser.add_argument('--device', '-d', type=int,
@@ -56,11 +56,9 @@ max_epoch = 100
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
 y_train = train_data[:, 1:sentence_length-1].astype(np.int32)
-# y_train[y_train == w2i['<eos>']] = 0
 
 x_valid = valid_data[:, :sentence_length].astype(np.int32)
 y_valid = valid_data[:, 1:sentence_length-1].astype(np.int32)
-# y_valid[y_valid == w2i['<eos>']] = 0
 
 num_train_batch = len(x_train)//batch_size
 num_valid_batch = len(x_valid)//batch_size
