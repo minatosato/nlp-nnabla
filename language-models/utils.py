@@ -9,6 +9,9 @@
 import numpy as np
 import os
 
+from typing import List
+from typing import Tuple
+
 w2i = {}
 i2w = {}
 
@@ -80,6 +83,24 @@ def wordseq2charseq(data):
             else:
                 data[i, j, :] = 0
     return data
+
+
+def to_cbow_dataset(sentences: List[List[int]], window_size: int = 1) -> Tuple[np.ndarray, np.ndarray]:
+    contexts: List[List[int]] = []
+    targets: List[int] = []
+
+    for sentence in sentences:
+        for word_index in range(window_size, len(sentence)-window_size):
+            targets.append(word_index)
+            ctx: List[int] = []
+            for t in range(-window_size, window_size+1):
+                if t == 0:
+                    continue
+                ctx.append(sentence[word_index + t])
+            contexts.append(ctx)
+    
+    return np.array(contexts, dtype=np.int32), np.array(targets, dtype=np.int32)[:, None]
+
 
 def with_padding(sequences, padding_type='post', max_sequence_length=None):
     if max_sequence_length is None:
