@@ -84,5 +84,5 @@ solver.set_parameters(nn.get_parameters())
 
 from trainer import Trainer
 
-trainer = Trainer(inputs=[x, t], loss=loss, solver=solver, save_path='cbow')
+trainer = Trainer(inputs=[x, t], loss=loss, metrics=dict(PPL=np.e**loss), solver=solver, save_path='cbow')
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
