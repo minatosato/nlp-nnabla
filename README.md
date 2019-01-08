@@ -88,6 +88,7 @@ Out[00]: '駅までどのくらいありますか。'
 ### Text classifiers
 - fastText ([`fasttext.py`](https://github.com/satopirka/nlp-nnabla/blob/master/text-classification/fasttext.py))
 - Self attention ([`self_attention.py`](https://github.com/satopirka/nlp-nnabla/blob/master/text-classification/self_attention.py))
+- LSTM classifier
 
 ## Future work
 - Skip-gram model
