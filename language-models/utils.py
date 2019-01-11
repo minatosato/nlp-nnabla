@@ -103,25 +103,56 @@ def negative_sampling(target: int, words: np.ndarray, prob: np.ndarray, k: int =
         ret = np.random.choice(words, size=k, p=prob)
     return ret
 
-def to_cbow_dataset(sentences: List[List[int]], window_size: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def to_cbow_dataset(sentences: List[List[int]], window_size: int = 1, ns: bool = False):
     contexts: List[List[int]] = []
     targets: List[int] = []
-    negative_samples: List[np.ndarray] = []
 
-    words, prob = calc_sampling_prob(sentences)
+    if ns:
+        negative_samples: List[np.ndarray] = []
+        words, prob = calc_sampling_prob(sentences)
 
     for sentence in sentences:
-        for word_index in range(window_size, len(sentence)-window_size):
-            targets.append(word_index)
-            negative_samples.append(negative_sampling(word_index, words, prob))
+        for _index in range(window_size, len(sentence)-window_size):
+            targets.append(sentence[_index])
+            if ns:
+                negative_samples.append(negative_sampling(sentence[_index], words, prob))
             ctx: List[int] = []
             for t in range(-window_size, window_size+1):
                 if t == 0:
                     continue
-                ctx.append(sentence[word_index + t])
+                ctx.append(sentence[_index + t])
             contexts.append(ctx)
     
-    return np.array(contexts, dtype=np.int32), np.array(targets, dtype=np.int32)[:, None], np.array(negative_samples, dtype=np.int32)
+    ret = [np.array(contexts, dtype=np.int32), np.array(targets, dtype=np.int32)[:, None]]
+    if ns:
+        ret.append(np.array(negative_samples, dtype=np.int32))
+    return tuple(ret)
+
+def to_cooccurrences(sentences: List[List[int]], window_size: int = 1) -> np.ndarray:
+    matrix = np.zeros((len(w2i), len(w2i)), dtype=np.int32)
+    for sentence in sentences:
+        for word_index in range(window_size, len(sentence)-window_size):
+            for t in range(-window_size, window_size+1):
+                if t == 0:
+                    continue
+                context_word_index = sentence[word_index + t]
+                matrix[sentence[word_index]][context_word_index] += 1
+    return matrix
+
+def to_glove_dataset(sentences: List[List[int]], window_size: int = 1) -> np.ndarray:
+    matrix = to_cooccurrences(sentences, window_size=window_size)
+    central: List[int] = []
+    context: List[int] = []
+    y: List[int] = []
+    from itertools import combinations
+
+    for i, j in combinations(range(len(w2i)), 2):
+        central.append(i)
+        context.append(j)
+        y.append(matrix[i, j])
+
+    return np.array(central), np.array(context), np.array(y)[:, None]
+
 
 
 def with_padding(sequences, padding_type='post', max_sequence_length=None):
