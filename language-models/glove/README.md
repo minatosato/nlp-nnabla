@@ -1,3 +1,15 @@
+# GloVe: Global Vectors for Word Representation
+This is tiny implementation of the paper [GloVe: Global Vectors for Word Representation](https://www.aclweb.org/anthology/D14-1162).
+
+To start training, 
+
+```
+python glove.py -c cudnn
+```
+
+After training, you can search the similar words for the query word.
+
+<img src="https://raw.githubusercontent.com/satopirka/nlp-nnabla/feature/embedding/language-models/glove/log/loss.png" style="width: 400px;">
 
 ```
 $ python predict.py five
