@@ -9,8 +9,9 @@
 import numpy as np
 import os
 
+from scipy import sparse
 from collections import Counter
-
+from itertools import combinations
 from typing import List
 from typing import Tuple
 
@@ -128,25 +129,31 @@ def to_cbow_dataset(sentences: List[List[int]], window_size: int = 1, ns: bool =
         ret.append(np.array(negative_samples, dtype=np.int32))
     return tuple(ret)
 
-def to_cooccurrences(sentences: List[List[int]], window_size: int = 1) -> np.ndarray:
-    matrix = np.zeros((len(w2i), len(w2i)), dtype=np.int32)
+def to_cooccurrences(sentences: List[List[int]], window_size: int = 1) -> sparse.lil_matrix:
+    matrix = sparse.lil_matrix((len(w2i), len(w2i)))
     for sentence in sentences:
-        for word_index in range(window_size, len(sentence)-window_size):
-            for t in range(-window_size, window_size+1):
-                if t == 0:
-                    continue
-                context_word_index = sentence[word_index + t]
-                matrix[sentence[word_index]][context_word_index] += 1
+        for i, word_id in enumerate(sentence):
+            contexts = sentence[max(0, i - window_size): i]
+            for j, context_id in enumerate(contexts):
+                distance = len(contexts) - j
+                matrix[word_id, context_id] += 1 / distance
+                matrix[context_id, word_id] += 1 / distance
+        # for i in range(window_size, len(sentence)-window_size):
+        #     word_index: int = sentence[i]
+        #     for t in range(-window_size, window_size+1):
+        #         if t == 0:
+        #             continue
+        #         context_word_index = sentence[i + t]
+        #         matrix[word_index, context_word_index] += 1
     return matrix
 
-def to_glove_dataset(sentences: List[List[int]], window_size: int = 1) -> np.ndarray:
+def to_glove_dataset(sentences: List[List[int]], window_size: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     matrix = to_cooccurrences(sentences, window_size=window_size)
     central: List[int] = []
     context: List[int] = []
     y: List[int] = []
-    from itertools import combinations
 
-    for i, j in combinations(range(len(w2i)), 2):
+    for i, j in zip(*matrix.nonzero()):
         central.append(i)
         context.append(j)
         y.append(matrix[i, j])
