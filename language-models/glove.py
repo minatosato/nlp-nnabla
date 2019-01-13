@@ -105,8 +105,7 @@ solver.set_parameters(nn.get_parameters())
 from trainer import Trainer
 
 trainer = Trainer(inputs=[x_central, x_context, t], loss=loss, metrics=dict(loss=loss), solver=solver, save_path='glove')
-# nn.load_parameters("./glove/snapshot_epoch_4.h5")
-trainer.run(train_data_iter, valid_data_iter, epochs=40)
+trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
 
 f = open('vectors.txt', 'w')
 f.write('{} {}\n'.format(vocab_size-1, embedding_size))
