@@ -41,7 +41,7 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-window_size = 5
+window_size = 2
 
 train_data = load_data('./ptb/train.txt')
 x_train, y_train = to_cbow_dataset(train_data, window_size=window_size)
@@ -51,9 +51,9 @@ x_valid, y_valid = to_cbow_dataset(valid_data, window_size=window_size)
 
 vocab_size = len(w2i)
 embedding_size = 128
-hidden_size = 128
-batch_size = 32
-max_epoch = 100
+batch_size = 128
+max_epoch = 7
+k = 5
 
 num_train_batch = len(x_train)//batch_size
 num_valid_batch = len(x_valid)//batch_size
@@ -68,21 +68,38 @@ train_data_iter = data_iterator_simple(load_train_func, len(x_train), batch_size
 valid_data_iter = data_iterator_simple(load_valid_func, len(x_valid), batch_size, shuffle=True, with_file_cache=False)
 
 x = nn.Variable([batch_size, window_size*2])
-with nn.parameter_scope('embedding_in'):
+with nn.parameter_scope('W_in'):
     h = PF.embed(x, vocab_size, embedding_size)
 h = F.mean(h, axis=1)
-with nn.parameter_scope('output'):
+with nn.parameter_scope('W_out'):
     y = PF.affine(h, vocab_size, with_bias=False)
 t = nn.Variable((batch_size, 1))
 entropy = F.softmax_cross_entropy(y, t)
 loss = F.mean(entropy)
 
+
 # Create solver.
-solver = S.Momentum(1e-2, momentum=0.9)
+solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
 
 from trainer import Trainer
 
 trainer = Trainer(inputs=[x, t], loss=loss, metrics=dict(PPL=np.e**loss), solver=solver, save_path='cbow')
+
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
+
+with open('vectors.txt', 'w') as f:
+    f.write('{} {}\n'.format(vocab_size-1, embedding_size))
+    with nn.parameter_scope('W_in'):
+        x = nn.Variable((1, 1))
+        y = PF.embed(x, vocab_size, embedding_size)
+    for word, i in w2i.items():
+        x.d = np.array([[i]])
+        y.forward()
+        str_vec = ' '.join(map(str, list(y.d.copy()[0][0])))
+        f.write('{} {}\n'.format(word, str_vec))
+
+import gensim
+w2v = gensim.models.KeyedVectors.load_word2vec_format('./vectors.txt', binary=False)
+print(w2v.most_similar(positive=['monday']))
