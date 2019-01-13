@@ -6,6 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import sys
+sys.path.append('../../') 
+
 import numpy as np
 
 import nnabla as nn
@@ -16,16 +19,18 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from parametric_functions import lstm
-from functions import time_distributed
-from functions import time_distributed_softmax_cross_entropy
-from functions import get_mask
-from functions import expand_dims
+from common.parametric_functions import lstm
+from common.functions import time_distributed
+from common.functions import time_distributed_softmax_cross_entropy
+from common.functions import get_mask
+from common.functions import expand_dims
 
-from utils import load_data
-from utils import wordseq2charseq
-from utils import w2i, i2w, c2i, i2c, word_length
-from utils import with_padding
+from common.utils import load_data
+from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import with_padding
+
+from common.trainer import Trainer
+
 from utils import to_glove_dataset
 
 import argparse
@@ -41,19 +46,18 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-window_size = 10
-
 train_data = load_data('./ptb/train.txt')
-central_train, context_train, target_train = to_glove_dataset(train_data, window_size=window_size)
-
 valid_data = load_data('./ptb/valid.txt')
-central_valid, context_valid, target_valid = to_glove_dataset(valid_data, window_size=window_size)
 
 vocab_size = len(w2i)
 embedding_size = 128
 batch_size = 128
 max_epoch = 100
 k = 5
+window_size = 10
+
+central_train, context_train, target_train = to_glove_dataset(train_data, vocab_size=vocab_size, window_size=window_size)
+central_valid, context_valid, target_valid = to_glove_dataset(valid_data, vocab_size=vocab_size, window_size=window_size)
 
 num_train_batch = len(central_train)//batch_size
 num_valid_batch = len(central_valid)//batch_size
@@ -101,26 +105,17 @@ loss = F.sum(weight * ((prediction - F.log(t+1)) ** 2))
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
-
-from trainer import Trainer
-
-trainer = Trainer(inputs=[x_central, x_context, t], loss=loss, metrics=dict(loss=loss), solver=solver, save_path='glove')
+trainer = Trainer(inputs=[x_central, x_context, t], loss=loss, metrics=dict(loss=loss), solver=solver)
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
 
-f = open('vectors.txt', 'w')
-f.write('{} {}\n'.format(vocab_size-1, embedding_size))
-# vectors = np.zeros(shape=(vocab_size, embedding_size))
-with nn.parameter_scope('central_embedding'):
-    x = nn.Variable((1, 1))
-    y = PF.embed(x, vocab_size, embedding_size)
-# vectors = nn.get_parameters()['W_in/embed/W'].d.copy()
-for word, i in w2i.items():
-    x.d = np.array([[i]])
-    y.forward()
-    str_vec = ' '.join(map(str, list(y.d.copy()[0][0])))
-    f.write('{} {}\n'.format(word, str_vec))
-f.close()
+with open('vectors.txt', 'w') as f:
+    f.write('{} {}\n'.format(vocab_size-1, embedding_size))
+    with nn.parameter_scope('central_embedding'):
+        x = nn.Variable((1, 1))
+        y = PF.embed(x, vocab_size, embedding_size)
+    for word, i in w2i.items():
+        x.d = np.array([[i]])
+        y.forward()
+        str_vec = ' '.join(map(str, list(y.d.copy()[0][0])))
+        f.write('{} {}\n'.format(word, str_vec))
 
-import gensim
-w2v = gensim.models.KeyedVectors.load_word2vec_format('./vectors.txt', binary=False)
-w2v.most_similar(positive=['the'])
