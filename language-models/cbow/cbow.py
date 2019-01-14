@@ -6,6 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import sys
+sys.path.append('../../') 
+
 import numpy as np
 
 import nnabla as nn
@@ -16,17 +19,20 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from parametric_functions import lstm
-from functions import time_distributed
-from functions import time_distributed_softmax_cross_entropy
-from functions import get_mask
-from functions import expand_dims
+from common.parametric_functions import lstm
+from common.functions import time_distributed
+from common.functions import time_distributed_softmax_cross_entropy
+from common.functions import get_mask
+from common.functions import expand_dims
 
-from utils import load_data
-from utils import wordseq2charseq
-from utils import w2i, i2w, c2i, i2c, word_length
-from utils import with_padding
-from utils import to_cbow_dataset
+from common.utils import load_data
+from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import with_padding
+from common.utils import to_cbow_dataset
+
+from common.trainer import Trainer
+
+from typing import List
 
 import argparse
 parser = argparse.ArgumentParser(description='CBOW model training.')
@@ -43,16 +49,16 @@ if args.context == 'cudnn':
 
 window_size = 2
 
-train_data = load_data('./ptb/train.txt')
+train_data: List[List[int]] = load_data('./ptb/train.txt')
 x_train, y_train = to_cbow_dataset(train_data, window_size=window_size)
 
-valid_data = load_data('./ptb/valid.txt')
+valid_data: List[List[int]] = load_data('./ptb/valid.txt')
 x_valid, y_valid = to_cbow_dataset(valid_data, window_size=window_size)
 
 vocab_size = len(w2i)
 embedding_size = 128
 batch_size = 128
-max_epoch = 7
+max_epoch = 10
 k = 5
 
 num_train_batch = len(x_train)//batch_size
@@ -83,9 +89,7 @@ solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
 
-from trainer import Trainer
-
-trainer = Trainer(inputs=[x, t], loss=loss, metrics=dict(PPL=np.e**loss), solver=solver, save_path='cbow')
+trainer = Trainer(inputs=[x, t], loss=loss, metrics=dict(PPL=np.e**loss), solver=solver)
 
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
 
@@ -100,6 +104,3 @@ with open('vectors.txt', 'w') as f:
         str_vec = ' '.join(map(str, list(y.d.copy()[0][0])))
         f.write('{} {}\n'.format(word, str_vec))
 
-import gensim
-w2v = gensim.models.KeyedVectors.load_word2vec_format('./vectors.txt', binary=False)
-print(w2v.most_similar(positive=['monday']))

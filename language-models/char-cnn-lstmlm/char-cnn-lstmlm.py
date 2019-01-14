@@ -6,6 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import sys
+sys.path.append('../../') 
+
 import numpy as np
 
 import nnabla as nn
@@ -16,17 +19,20 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from parametric_functions import lstm
-from parametric_functions import highway
-from functions import time_distributed
-from functions import time_distributed_softmax_cross_entropy
-from functions import expand_dims
-from functions import get_mask
+from common.parametric_functions import lstm
+from common.parametric_functions import highway
+from common.functions import time_distributed
+from common.functions import time_distributed_softmax_cross_entropy
+from common.functions import expand_dims
+from common.functions import get_mask
 
-from utils import load_data
+from common.utils import load_data
+from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import with_padding
+
+from common.trainer import Trainer
+
 from utils import wordseq2charseq
-from utils import w2i, i2w, c2i, i2c, word_length
-from utils import with_padding
 
 import argparse
 parser = argparse.ArgumentParser(description='Char-cnn-lstm language model training.')
@@ -57,13 +63,12 @@ char_vocab_size = len(c2i)
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
 y_train = train_data[:, 1:sentence_length+1].astype(np.int32)
-
-x_train = wordseq2charseq(x_train)
+x_train = wordseq2charseq(x_train, i2w, c2i, i2c)
 
 x_valid = valid_data[:, :sentence_length].astype(np.int32)
 y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)
 
-x_valid = wordseq2charseq(x_valid)
+x_valid = wordseq2charseq(x_valid, i2w, c2i, i2c)
 
 num_train_batch = len(x_train)//batch_size
 num_valid_batch = len(x_valid)//batch_size
@@ -131,8 +136,6 @@ x, t, loss = build_model()
 # Create solver.
 solver = S.Momentum(1e-2, momentum=0.9)
 solver.set_parameters(nn.get_parameters())
-
-from trainer import Trainer
 
 x, t, loss = build_model(train=True)
 trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver, save_path='char-cnn-lstmlm')

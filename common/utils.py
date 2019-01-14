@@ -32,7 +32,7 @@ i2c[0] = ' '
 word_length = 20
 
 
-def load_data(filename, with_bos=False):
+def load_data(filename, with_bos=False) -> List[List[int]]:
     global w2i, i2w
     global c2i, i2c
     
