@@ -26,7 +26,6 @@ from common.functions import get_mask
 from common.functions import expand_dims
 
 from common.utils import load_data
-from common.utils import wordseq2charseq
 from common.utils import w2i, i2w, c2i, i2c, word_length
 from common.utils import with_padding
 

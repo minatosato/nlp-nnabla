@@ -6,6 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import sys
+sys.path.append('../../')
+
 import numpy as np
 
 import nnabla as nn
@@ -16,16 +19,17 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from parametric_functions import lstm
-from functions import time_distributed
-from functions import time_distributed_softmax_cross_entropy
-from functions import get_mask
-from functions import expand_dims
+from common.parametric_functions import lstm
+from common.functions import time_distributed
+from common.functions import time_distributed_softmax_cross_entropy
+from common.functions import get_mask
+from common.functions import expand_dims
 
-from utils import load_data
-from utils import wordseq2charseq
-from utils import w2i, i2w, c2i, i2c, word_length
-from utils import with_padding
+from common.utils import load_data
+from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import with_padding
+
+from common.trainer import Trainer
 
 import argparse
 parser = argparse.ArgumentParser(description='Bi-directional LSTM language model training.')
@@ -97,9 +101,6 @@ loss = F.mean(F.div2(F.sum(entropy, axis=1), count))
 # Create solver.
 solver = S.Momentum(1e-2, momentum=0.9)
 solver.set_parameters(nn.get_parameters())
-
-
-from trainer import Trainer
 
 trainer = Trainer(inputs=[x, t], loss=loss, metrics={'PPL': np.e**loss}, solver=solver, save_path='bilstmlm')
 trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
