@@ -11,6 +11,7 @@ import os
 
 from scipy import sparse
 from collections import Counter
+from pathlib import Path
 from itertools import combinations
 from typing import List
 from typing import Tuple
@@ -73,93 +74,23 @@ def load_data(filename, with_bos=False) -> List[List[int]]:
                 sentence.append(w2i['<bos>'])
     return sentences
 
-def wordseq2charseq(data):
-    global word_length
-    data = np.repeat(np.expand_dims(data, axis=2), word_length, axis=2)
-    data[:, :, 1:] = 0
-    for i in range(data.shape[0]):
-        for j in range(data.shape[1]):
-            word = data[i][j][0]
-            if word != 0:
-                for k, char in enumerate(i2w[word]):
-                    data[i][j][k] = c2i[char]
-            else:
-                data[i, j, :] = 0
-    return data
 
-def calc_sampling_prob(sentences: List[List[int]]) -> Tuple[np.ndarray, np.ndarray]:
-    oneline: List[int] = []
-    for sentence in sentences:
-        oneline.extend(sentence)
-    counter = Counter(oneline)
-    words = np.array(list(counter.keys()), dtype=np.int32)
-    prob = np.array(list(counter.values())) / sum(counter.values())
-    prob = np.power(prob, 0.75)
-    prob = prob / np.sum(prob)
-    return words, prob
+def load_imdb(vocab_size):
+    dataset_path = Path('./imdb.npz')
 
-def negative_sampling(target: int, words: np.ndarray, prob: np.ndarray, k: int = 5):
-    ret = np.random.choice(words, size=k, p=prob)
-    while target in ret:
-        ret = np.random.choice(words, size=k, p=prob)
-    return ret
+    if not dataset_path.exists():
+        import os
+        os.system('wget https://s3.amazonaws.com/text-datasets/imdb.npz')
 
-def to_cbow_dataset(sentences: List[List[int]], window_size: int = 1, ns: bool = False):
-    contexts: List[List[int]] = []
-    targets: List[int] = []
-
-    if ns:
-        negative_samples: List[np.ndarray] = []
-        words, prob = calc_sampling_prob(sentences)
-
-    for sentence in sentences:
-        for _index in range(window_size, len(sentence)-window_size):
-            targets.append(sentence[_index])
-            if ns:
-                negative_samples.append(negative_sampling(sentence[_index], words, prob))
-            ctx: List[int] = []
-            for t in range(-window_size, window_size+1):
-                if t == 0:
-                    continue
-                ctx.append(sentence[_index + t])
-            contexts.append(ctx)
-    
-    ret = [np.array(contexts, dtype=np.int32), np.array(targets, dtype=np.int32)[:, None]]
-    if ns:
-        ret.append(np.array(negative_samples, dtype=np.int32))
-    return tuple(ret)
-
-def to_cooccurrences(sentences: List[List[int]], window_size: int = 1) -> sparse.lil_matrix:
-    matrix = sparse.lil_matrix((len(w2i), len(w2i)))
-    for sentence in sentences:
-        for i, word_id in enumerate(sentence):
-            contexts = sentence[max(0, i - window_size): i]
-            for j, context_id in enumerate(contexts):
-                distance = len(contexts) - j
-                matrix[word_id, context_id] += 1 / distance
-                matrix[context_id, word_id] += 1 / distance
-        # for i in range(window_size, len(sentence)-window_size):
-        #     word_index: int = sentence[i]
-        #     for t in range(-window_size, window_size+1):
-        #         if t == 0:
-        #             continue
-        #         context_word_index = sentence[i + t]
-        #         matrix[word_index, context_word_index] += 1
-    return matrix
-
-def to_glove_dataset(sentences: List[List[int]], window_size: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    matrix = to_cooccurrences(sentences, window_size=window_size)
-    central: List[int] = []
-    context: List[int] = []
-    y: List[int] = []
-
-    for i, j in zip(*matrix.nonzero()):
-        central.append(i)
-        context.append(j)
-        y.append(matrix[i, j])
-
-    return np.array(central), np.array(context), np.array(y)[:, None]
-
+    unk_index = vocab_size - 1
+    raw = np.load(dataset_path)
+    ret = dict()
+    for k, v in raw.items():
+        if 'x' in k:
+            for i, sentence in enumerate(v):
+                v[i] = [word if word < unk_index else unk_index for word in sentence]
+        ret[k] = v
+    return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
 
 def with_padding(sequences, padding_type='post', max_sequence_length=None):

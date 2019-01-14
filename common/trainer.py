@@ -41,6 +41,14 @@ class Trainer:
     def __post_init__(self):
         if len(self.metrics) == 0:
             self.metrics['loss'] = self.loss
+        else:
+            ret: Dict[str, nn.Variable] = dict()
+            for key, value in self.metrics.items():
+                if ' ' in key:
+                    ret[key.replace(' ', '-')] = value
+                else:
+                    ret[key] = value
+            self.metrics = ret
         
         self.monitor: M.Monitor = M.Monitor(self.save_path)
         self.monitor_series: Dict[str, M.MonitorSeries] = dict()

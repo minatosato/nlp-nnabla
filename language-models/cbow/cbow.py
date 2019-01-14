@@ -28,7 +28,7 @@ from common.functions import expand_dims
 from common.utils import load_data
 from common.utils import w2i, i2w, c2i, i2c, word_length
 from common.utils import with_padding
-from common.utils import to_cbow_dataset
+from utils import to_cbow_dataset
 
 from common.trainer import Trainer
 
