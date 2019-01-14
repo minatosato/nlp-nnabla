@@ -1,13 +1,14 @@
 # 
-# Copyright (c) 2017-2018 Minato Sato
+# Copyright (c) 2017-2019 Minato Sato
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
 
-from collections import OrderedDict
-import pickle
+import sys
+sys.path.append('../../')
+
 import numpy as np
 
 import nnabla as nn
@@ -18,12 +19,17 @@ from nnabla.utils.data_iterator import data_iterator_simple
 
 from tqdm import tqdm
 
-from parametric_functions import lstm
-from parametric_functions import lstm_cell
+from common.parametric_functions import lstm
+from common.parametric_functions import lstm_cell
 
-from functions import get_mask
-from functions import time_distributed
-from functions import time_distributed_softmax_cross_entropy
+from common.functions import get_mask
+from common.functions import time_distributed
+from common.functions import time_distributed_softmax_cross_entropy
+
+from common.trainer import Trainer
+
+from seq2seq.utils import load_data
+from seq2seq.utils import with_padding
 
 import argparse
 parser = argparse.ArgumentParser(description='Encoder-decoder model training.')
@@ -37,9 +43,6 @@ if args.context == 'cudnn':
     from nnabla.ext_utils import get_extension_context
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
-
-from utils import load_data
-from utils import with_padding
 
 train_source, dev_source, test_source, w2i_source, i2w_source = load_data('./data', 'en')
 train_source = with_padding(train_source, padding_type='post')[:,::-1].astype(np.int32)
@@ -168,43 +171,5 @@ x, y, loss = build_model()
 solver = S.Momentum(1e-2, momentum=0.9)
 solver.set_parameters(nn.get_parameters())
 
-# Create monitor.
-from nnabla.monitor import Monitor, MonitorSeries, MonitorTimeElapsed
-monitor = Monitor('./tmp-encdec')
-monitor_perplexity_train = MonitorSeries('perplexity_train', monitor, interval=1)
-monitor_perplexity_dev = MonitorSeries('perplexity_dev', monitor, interval=1)
-
-best_dev_loss = 9999
-
-for epoch in range(max_epoch):
-    train_loss_set = []
-    progress = tqdm(total=train_data_iter.size//batch_size)
-    for i in range(num_train_batch):
-        x.d, y.d = train_data_iter.next()
-        loss.forward()
-        solver.zero_grad()
-        loss.backward()
-        solver.update()
-        train_loss_set.append(loss.d.copy())
-
-        progress.set_description(f"epoch: {epoch+1}, train perplexity: {np.e**np.mean(train_loss_set):.5f}")
-        progress.update(1)
-    progress.close()
-
-    dev_loss_set = []
-    for i in range(num_dev_batch):
-        x.d, y.d = dev_data_iter.next()
-        loss.forward()
-        dev_loss_set.append(loss.d.copy())
-
-    monitor_perplexity_train.add(epoch+1, np.e**np.mean(train_loss_set))
-    monitor_perplexity_dev.add(epoch+1, np.e**np.mean(dev_loss_set))
-
-    # dev_loss = np.e**np.mean(dev_loss_set)
-    # if best_dev_loss > dev_loss:
-    #     best_dev_loss = dev_loss
-    #     print('best dev loss updated! {}'.format(dev_loss))
-    #     nn.save_parameters('encdec_best.h5')
-
-
-
+trainer = Trainer(inputs=[x, y], loss=loss, metrics=dict(PPL=np.e**loss), solver=solver)
+trainer.run(train_data_iter, dev_data_iter, epochs=5, verbose=1)
