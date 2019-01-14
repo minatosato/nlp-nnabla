@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-import sys, os
+import sys
 sys.path.append('../../') 
 
 import numpy as np
