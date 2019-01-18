@@ -26,8 +26,7 @@ from common.functions import time_distributed_softmax_cross_entropy
 from common.functions import expand_dims
 from common.functions import get_mask
 
-from common.utils import load_data
-from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import PTBDataset
 from common.utils import with_padding
 
 from common.trainer import Trainer
@@ -48,27 +47,25 @@ if args.context == 'cudnn':
     nn.set_default_context(ctx)
 
 
-train_data = load_data('./ptb/train.txt', with_bos=True)
-train_data = with_padding(train_data, padding_type='post')
-
-valid_data = load_data('./ptb/valid.txt', with_bos=True)
-valid_data = with_padding(valid_data, padding_type='post')
+ptb_dataset = PTBDataset(return_char_info=True)
+train_data = with_padding(ptb_dataset.train_data, padding_type='post')
+valid_data = with_padding(ptb_dataset.valid_data, padding_type='post')
 
 sentence_length = 60
 batch_size = 100
 max_epoch = 300
 
-word_vocab_size = len(w2i)
-char_vocab_size = len(c2i)
+word_vocab_size = len(ptb_dataset.w2i)
+char_vocab_size = len(ptb_dataset.c2i)
 
 x_train = train_data[:, :sentence_length].astype(np.int32)
 y_train = train_data[:, 1:sentence_length+1].astype(np.int32)
-x_train = wordseq2charseq(x_train, i2w, c2i, i2c)
+x_train = wordseq2charseq(x_train, ptb_dataset.i2w, ptb_dataset.c2i, ptb_dataset.i2c)
 
 x_valid = valid_data[:, :sentence_length].astype(np.int32)
 y_valid = valid_data[:, 1:sentence_length+1].astype(np.int32)
 
-x_valid = wordseq2charseq(x_valid, i2w, c2i, i2c)
+x_valid = wordseq2charseq(x_valid, ptb_dataset.i2w, ptb_dataset.c2i, ptb_dataset.i2c)
 
 num_train_batch = len(x_train)//batch_size
 num_valid_batch = len(x_valid)//batch_size
@@ -89,7 +86,7 @@ filster_sizes = [1, 2, 3, 4, 5, 6, 7]
 dropout_ratio = 0.5
 
 def build_model(train=True, get_embeddings=False):
-    x = nn.Variable((batch_size, sentence_length, word_length))
+    x = nn.Variable((batch_size, sentence_length, ptb_dataset.word_length))
     mask = expand_dims(F.sign(x), axis=-1)
     t = nn.Variable((batch_size, sentence_length))
 
@@ -99,7 +96,7 @@ def build_model(train=True, get_embeddings=False):
     output = []
     for f, f_size in zip(filters, filster_sizes):
         _h = PF.convolution(h, f, kernel=(1, f_size), pad=(0, f_size//2), name='conv_{}'.format(f_size))
-        _h = F.max_pooling(_h, kernel=(1, word_length))
+        _h = F.max_pooling(_h, kernel=(1, ptb_dataset.word_length))
         output.append(_h)
     h = F.concatenate(*output, axis=1)
     h = F.transpose(h, (0, 2, 1, 3))

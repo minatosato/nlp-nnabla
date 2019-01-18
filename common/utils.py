@@ -13,77 +13,93 @@ from scipy import sparse
 from collections import Counter
 from pathlib import Path
 from itertools import combinations
+from pathlib import Path
 from typing import List
 from typing import Tuple
+from typing import Dict
+from dataclasses import dataclass
+from dataclasses import field
 
-w2i = {}
-i2w = {}
+from nnabla.utils.data_source_loader import download
+from nnabla.utils.data_source_loader import load_npy
+from nnabla.utils.data_source_loader import get_data_home
 
-c2i = {}
-i2c = {}
+@dataclass
+class PTBDataset(object):
+    with_bos: bool = False
+    return_char_info: bool = False
+    word_length: int = 20
+    w2i: Dict[str, int] = field(default_factory=dict)
+    i2w: Dict[int, str] = field(default_factory=dict)
+    c2i: Dict[str, int] = field(default_factory=dict)
+    i2c: Dict[int, str] = field(default_factory=dict)
 
-w2i['pad'] = 0
-i2w[0] = 'pad'
-w2i['<eos>'] = 1
-i2w[1] = '<eos>'
+    def __post_init__(self):       
+        self.w2i['pad'] = 0
+        self.i2w[0] = 'pad'
+        self.w2i['<eos>'] = 1
+        self.i2w[1] = '<eos>'
 
-c2i[' '] = 0
-i2c[0] = ' '
+        self.c2i[' '] = 0
+        self.i2c[0] = ' '
 
-word_length = 20
+        if self.with_bos:
+            self.w2i['<bos>'] = 2
+            self.i2w[2] = '<bos>'
+
+        self.ptb_url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.{0}.txt'
+        
+        self.train_data = self._load_data('train')
+        self.valid_data = self._load_data('valid')
+        self.test_data = self._load_data('test')
+
+    def _load_data(self, type_name: str):
+        url = self.ptb_url.format(type_name)
+        with download(url, open_file=True) as f:
+            lines = f.read().decode('utf-8').replace('\n', '<eos>')
+
+            if self.return_char_info:
+                for char in set(lines):
+                    if char not in self.c2i:
+                        self.c2i[char] = len(self.c2i)
+                    if self.c2i[char] not in self.i2c:
+                        self.i2c[self.c2i[char]] = char
+
+            words = lines.strip().split()
+        dataset = np.ndarray((len(words), ), dtype=np.int32)
+
+        for i, word in enumerate(words):
+            if word not in self.w2i:
+                self.w2i[word] = len(self.w2i)
+            if self.w2i[word] not in self.i2w:
+                self.i2w[self.w2i[word]] = word
+            dataset[i] = self.w2i[word]
+
+        sentences = []
+        sentence = []
+        if self.with_bos:
+            sentence.append(self.w2i['<bos>'])
+        for index in dataset:
+            if self.i2w[index] != '<eos>':
+                sentence.append(index)
+            else:
+                sentence.append(index)
+                sentences.append(sentence)
+                sentence = []
+                if self.with_bos:
+                    sentence.append(self.w2i['<bos>'])
+        return sentences
 
 
-def load_data(filename, with_bos=False) -> List[List[int]]:
-    global w2i, i2w
-    global c2i, i2c
-    
-    if with_bos:
-        w2i['<bos>'] = 2
-        i2w[2] = '<bos>'
+def load_imdb(vocab_size: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    file_name = 'imdb.npz'
+    url = f'https://s3.amazonaws.com/text-datasets/{file_name}'
+    download(url, open_file=False)
 
-    with open(filename) as f:
-        lines = f.read().replace('\n', '<eos>')
-        for char in set(lines):
-            if char not in c2i:
-                c2i[char] = len(c2i)
-            if c2i[char] not in i2c:
-                i2c[c2i[char]] = char
-
-        words = lines.strip().split()
-    dataset = np.ndarray((len(words), ), dtype=np.int32)
-
-    for i, word in enumerate(words):
-        if word not in w2i:
-            w2i[word] = len(w2i)
-        if w2i[word] not in i2w:
-            i2w[w2i[word]] = word
-        dataset[i] = w2i[word]
-
-    sentences = []
-    sentence = []
-    if with_bos:
-        sentence.append(w2i['<bos>'])
-    for index in dataset:
-        if i2w[index] != '<eos>':
-            sentence.append(index)
-        else:
-            sentence.append(index)
-            sentences.append(sentence)
-            sentence = []
-            if with_bos:
-                sentence.append(w2i['<bos>'])
-    return sentences
-
-
-def load_imdb(vocab_size):
-    dataset_path = Path('./imdb.npz')
-
-    if not dataset_path.exists():
-        import os
-        os.system('wget https://s3.amazonaws.com/text-datasets/imdb.npz')
+    dataset_path = Path(get_data_home()) / file_name
 
     unk_index = vocab_size - 1
-    raw = np.load(dataset_path)
+    raw = load_npy(dataset_path)
     ret = dict()
     for k, v in raw.items():
         if 'x' in k:
@@ -112,12 +128,4 @@ def with_padding(sequences, padding_type='post', max_sequence_length=None):
             raise Exception('padding type error. padding type must be "post" or "pre"')
 
     return np.array(list(map(_with_padding, sequences)), dtype=np.int32)
-
-ptb_url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.{0}.txt'
-types = ['train', 'valid', 'test']
-ptb_urls = map(lambda x: ptb_url.format(x), types)
-os.makedirs('./ptb/', exist_ok=True)
-for _url, _type in zip(ptb_urls, types):
-    if not os.path.exists('./ptb/' + _type + '.txt'):
-        os.system('wget -O ' + './ptb/' + _type + '.txt ' + _url)
 

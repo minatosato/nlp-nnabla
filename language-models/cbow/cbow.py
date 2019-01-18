@@ -25,8 +25,7 @@ from common.functions import time_distributed_softmax_cross_entropy
 from common.functions import get_mask
 from common.functions import expand_dims
 
-from common.utils import load_data
-from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import PTBDataset
 from common.utils import with_padding
 from utils import to_cbow_dataset
 
@@ -49,13 +48,15 @@ if args.context == 'cudnn':
 
 window_size = 2
 
-train_data: List[List[int]] = load_data('./ptb/train.txt')
+ptb_dataset = PTBDataset()
+
+train_data = ptb_dataset.train_data
 x_train, y_train = to_cbow_dataset(train_data, window_size=window_size)
 
-valid_data: List[List[int]] = load_data('./ptb/valid.txt')
+valid_data = ptb_dataset.valid_data
 x_valid, y_valid = to_cbow_dataset(valid_data, window_size=window_size)
 
-vocab_size = len(w2i)
+vocab_size = len(ptb_dataset.w2i)
 embedding_size = 128
 batch_size = 128
 max_epoch = 10
@@ -98,7 +99,7 @@ with open('vectors.txt', 'w') as f:
     with nn.parameter_scope('W_in'):
         x = nn.Variable((1, 1))
         y = PF.embed(x, vocab_size, embedding_size)
-    for word, i in w2i.items():
+    for word, i in ptb_dataset.w2i.items():
         x.d = np.array([[i]])
         y.forward()
         str_vec = ' '.join(map(str, list(y.d.copy()[0][0])))

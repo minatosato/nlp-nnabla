@@ -25,8 +25,7 @@ from common.functions import time_distributed_softmax_cross_entropy
 from common.functions import get_mask
 from common.functions import expand_dims
 
-from common.utils import load_data
-from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import PTBDataset
 from common.utils import with_padding
 
 from common.trainer import Trainer
@@ -44,14 +43,12 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
+ptb_dataset = PTBDataset()
 
-train_data = load_data('./ptb/train.txt')
-train_data = with_padding(train_data, padding_type='post')
+train_data = with_padding(ptb_dataset.train_data, padding_type='post')
+valid_data = with_padding(ptb_dataset.valid_data, padding_type='post')
 
-valid_data = load_data('./ptb/valid.txt')
-valid_data = with_padding(valid_data, padding_type='post')
-
-vocab_size = len(w2i)
+vocab_size = len(ptb_dataset.w2i)
 sentence_length = 60
 embedding_size = 128
 hidden_size = 128

@@ -25,8 +25,7 @@ from common.functions import time_distributed_softmax_cross_entropy
 from common.functions import get_mask
 from common.functions import expand_dims
 
-from common.utils import load_data
-from common.utils import w2i, i2w, c2i, i2c, word_length
+from common.utils import PTBDataset
 from common.utils import with_padding
 
 from common.trainer import Trainer
@@ -46,18 +45,16 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-train_data = load_data('./ptb/train.txt')
-valid_data = load_data('./ptb/valid.txt')
+ptb_dataset = PTBDataset()
 
-vocab_size = len(w2i)
+vocab_size = len(ptb_dataset.w2i)
 embedding_size = 128
 batch_size = 128
 max_epoch = 100
-k = 5
 window_size = 10
 
-central_train, context_train, target_train = to_glove_dataset(train_data, vocab_size=vocab_size, window_size=window_size)
-central_valid, context_valid, target_valid = to_glove_dataset(valid_data, vocab_size=vocab_size, window_size=window_size)
+central_train, context_train, target_train = to_glove_dataset(ptb_dataset.train_data, vocab_size=vocab_size, window_size=window_size)
+central_valid, context_valid, target_valid = to_glove_dataset(ptb_dataset.valid_data, vocab_size=vocab_size, window_size=window_size)
 
 num_train_batch = len(central_train)//batch_size
 num_valid_batch = len(central_valid)//batch_size
@@ -113,7 +110,7 @@ with open('vectors.txt', 'w') as f:
     with nn.parameter_scope('central_embedding'):
         x = nn.Variable((1, 1))
         y = PF.embed(x, vocab_size, embedding_size)
-    for word, i in w2i.items():
+    for word, i in ptb_dataset.w2i.items():
         x.d = np.array([[i]])
         y.forward()
         str_vec = ' '.join(map(str, list(y.d.copy()[0][0])))
