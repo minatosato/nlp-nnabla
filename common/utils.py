@@ -24,6 +24,29 @@ from nnabla.utils.data_source_loader import download
 from nnabla.utils.data_source_loader import load_npy
 from nnabla.utils.data_source_loader import get_data_home
 
+
+def with_padding(sequences, padding_type='post', max_sequence_length=None):
+    if max_sequence_length is None:
+        max_sequence_length = max(map(lambda x: len(x), sequences))
+    else:
+        assert type(max_sequence_length) == int, 'max_sequence_length must be an integer.'
+        assert max_sequence_length > 0, 'max_sequence_length must be a positive integer.'
+
+    def _with_padding(sequence):
+        sequence = sequence[:max_sequence_length]
+        sequence_length = len(sequence)
+        pad_length = max_sequence_length - sequence_length
+        if padding_type == 'post':
+            return sequence + [0] * pad_length
+        elif padding_type == 'pre':
+            return [0] * pad_length + sequence
+        else:
+            raise Exception('padding type error. padding type must be "post" or "pre"')
+
+    return np.array(list(map(_with_padding, sequences)), dtype=np.int32)
+
+
+
 @dataclass
 class PTBDataset(object):
     with_bos: bool = False
@@ -109,23 +132,44 @@ def load_imdb(vocab_size: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.n
     return ret['x_train'], ret['x_test'], ret['y_train'], ret['y_test']
 
 
-def with_padding(sequences, padding_type='post', max_sequence_length=None):
-    if max_sequence_length is None:
-        max_sequence_length = max(map(lambda x: len(x), sequences))
-    else:
-        assert type(max_sequence_length) == int, 'max_sequence_length must be an integer.'
-        assert max_sequence_length > 0, 'max_sequence_length must be a positive integer.'
+def load_enja_parallel_data(lang: str):
+    url = 'https://raw.githubusercontent.com/odashi/small_parallel_enja/master/{0}.{1}'
+    data_types = ['train', 'dev', 'test']
+    url_list = [url.format(data_type, lang) for data_type in data_types]
 
-    def _with_padding(sequence):
-        sequence = sequence[:max_sequence_length]
-        sequence_length = len(sequence)
-        pad_length = max_sequence_length - sequence_length
-        if padding_type == 'post':
-            return sequence + [0] * pad_length
-        elif padding_type == 'pre':
-            return [0] * pad_length + sequence
-        else:
-            raise Exception('padding type error. padding type must be "post" or "pre"')
+    w2i = {}
+    i2w = {}
 
-    return np.array(list(map(_with_padding, sequences)), dtype=np.int32)
+    w2i['pad'] = 0
+    i2w[0] = 'pad'
+    w2i['<bos>'] = 1
+    i2w[1] = '<bos>'
+    w2i['<eos>'] = 2
+    i2w[2] = '<eos>'
+
+    def _load_data(url: str):
+        with download(url, open_file=True) as f:
+            lines = f.read().decode('utf-8').replace('\n', ' <eos> ')
+            words = lines.strip().split()
+        dataset = np.ndarray((len(words), ), dtype=np.int32)
+
+        for i, word in enumerate(words):
+            if word not in w2i:
+                w2i[word] = len(w2i)
+            if w2i[word] not in i2w:
+                i2w[w2i[word]] = word
+            dataset[i] = w2i[word]
+
+        sentences = []
+        sentence = []
+        for index in dataset:
+            if i2w[index] != '<eos>':
+                sentence.append(index)
+            else:
+                sentences.append(sentence)
+                sentence = []
+        return sentences
+
+    return list(map(_load_data, url_list)) + [w2i, i2w]
+
 

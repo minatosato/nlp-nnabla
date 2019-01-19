@@ -26,8 +26,8 @@ from common.functions import get_mask
 from common.functions import time_distributed
 from common.functions import time_distributed_softmax_cross_entropy
 
-from seq2seq.utils import load_data
-from seq2seq.utils import with_padding
+from common.utils import load_enja_parallel_data
+from common.utils import with_padding
 
 from common.trainer import Trainer
 
@@ -46,12 +46,12 @@ if args.context == 'cudnn':
     ctx = get_extension_context('cudnn', device_id=args.device)
     nn.set_default_context(ctx)
 
-train_source, dev_source, test_source, w2i_source, i2w_source = load_data('./data', 'en')
+train_source, dev_source, test_source, w2i_source, i2w_source = load_enja_parallel_data('en')
 train_source = with_padding(train_source, padding_type='post')[:,::-1].astype(np.int32)
 dev_source = with_padding(dev_source, padding_type='post')[:,::-1].astype(np.int32)
 test_source = with_padding(test_source, padding_type='post')[:,::-1].astype(np.int32)
 
-train_target, dev_target, test_target, w2i_target, i2w_target = load_data('./data', 'ja')
+train_target, dev_target, test_target, w2i_target, i2w_target = load_enja_parallel_data('ja')
 train_target = with_padding(train_target, padding_type='post').astype(np.int32)
 dev_target = with_padding(dev_target, padding_type='post').astype(np.int32)
 test_target = with_padding(test_target, padding_type='post').astype(np.int32)
