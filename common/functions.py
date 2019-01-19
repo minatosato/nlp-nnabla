@@ -48,6 +48,8 @@ def where(condition: nn.Variable, x:nn.Variable, y: nn.Variable) -> nn.Variable:
         condition (nnabla.Variable): A shape of (batch_size, 1)
         x (nnabla.Variable): A shape of (batch_size, embedding_size)
         y (nnabla.Variable): A shape of (batch_size, embedding_size)
+    Returns:
+        nn.Variable: A shape (batch_size, length).
     '''
     if x.ndim == 1:
         true_condition = F.reshape(condition, shape=list(condition.shape)+[1])
@@ -82,10 +84,10 @@ def time_distributed_softmax_cross_entropy(y_pred: nn.Variable, y_true: nn.Varia
     '''
     A time distributed softmax crossentropy
     Args:
-        y_pred (nnabla.Variable): A shape of [batch_size, length, number_of_outputs]. # one-hot
-        y_true (nnabla.Variable): A shape of [batch_size, length, 1]. # index
+        y_pred (nnabla.Variable): A shape of (batch_size, length, number_of_outputs). # one-hot
+        y_true (nnabla.Variable): A shape of (batch_size, length, 1). # index
     Returns:
-        nn.Variable: A shape [batch_size, length].
+        nn.Variable: A shape (batch_size, length).
     '''
     ret = []
     for y_p, y_t in zip(F.split(y_pred, axis=1), F.split(y_true, axis=1)):

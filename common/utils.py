@@ -7,12 +7,7 @@
 #
 
 import numpy as np
-import os
 
-from scipy import sparse
-from collections import Counter
-from pathlib import Path
-from itertools import combinations
 from pathlib import Path
 from typing import List
 from typing import Tuple
@@ -25,14 +20,15 @@ from nnabla.utils.data_source_loader import load_npy
 from nnabla.utils.data_source_loader import get_data_home
 
 
-def with_padding(sequences, padding_type='post', max_sequence_length=None):
-    if max_sequence_length is None:
+def with_padding(sequences: List[List[int]], padding_type: str = 'post',
+                 max_sequence_length: int = 0) -> np.ndarray:
+    if max_sequence_length == 0:
         max_sequence_length = max(map(lambda x: len(x), sequences))
     else:
         assert type(max_sequence_length) == int, 'max_sequence_length must be an integer.'
         assert max_sequence_length > 0, 'max_sequence_length must be a positive integer.'
 
-    def _with_padding(sequence):
+    def _with_padding(sequence: List[int]) -> np.ndarray:
         sequence = sequence[:max_sequence_length]
         sequence_length = len(sequence)
         pad_length = max_sequence_length - sequence_length
@@ -57,7 +53,7 @@ class PTBDataset(object):
     c2i: Dict[str, int] = field(default_factory=dict)
     i2c: Dict[int, str] = field(default_factory=dict)
 
-    def __post_init__(self):       
+    def __post_init__(self) -> None:       
         self.w2i['pad'] = 0
         self.i2w[0] = 'pad'
         self.w2i['<eos>'] = 1
@@ -72,14 +68,14 @@ class PTBDataset(object):
 
         self.ptb_url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.{0}.txt'
         
-        self.train_data = self._load_data('train')
-        self.valid_data = self._load_data('valid')
-        self.test_data = self._load_data('test')
+        self.train_data: List[List[int]] = self._load_data('train')
+        self.valid_data: List[List[int]] = self._load_data('valid')
+        self.test_data: List[List[int]] = self._load_data('test')
 
-    def _load_data(self, type_name: str):
+    def _load_data(self, type_name: str) -> List[List[int]]:
         url = self.ptb_url.format(type_name)
         with download(url, open_file=True) as f:
-            lines = f.read().decode('utf-8').replace('\n', '<eos>')
+            lines: str = f.read().decode('utf-8').replace('\n', '<eos>')
 
             if self.return_char_info:
                 for char in set(lines):

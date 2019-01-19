@@ -26,9 +26,9 @@ def simple_rnn(inputs: nn.Variable, units: int, mask: Optional[nn.Variable] = No
         return_sequences (bool): Whether to return the last output. in the output sequence, or the full sequence.
         fix_parameters (bool): Fix parameters (Set need_grad=False).
     Returns:
-        nn.Variable: A shape [batch_size, length, units].
+        nn.Variable: A shape [batch_size, length, units]
         or
-        nn.Variable: A shape [batch_size units]
+        nn.Variable: A shape [batch_size units].
     '''
 
     hs = []

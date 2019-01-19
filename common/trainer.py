@@ -38,7 +38,7 @@ class Trainer:
     save_path: str = 'log'
     current_epoch: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.metrics) == 0:
             self.metrics['loss'] = self.loss
         else:
@@ -53,7 +53,8 @@ class Trainer:
         self.monitor: M.Monitor = M.Monitor(self.save_path)
         self.monitor_series: Dict[str, M.MonitorSeries] = dict()
     
-    def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable, metrics: Dict[str, nn.Variable] = {}):
+    def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable,
+                         metrics: Dict[str, nn.Variable] = {}) -> None:
         self.inputs: List[nn.Variable] = inputs
         self.loss: nn.Variable = loss
         self.metrics: Dict[str, nn.Variable] = metrics
@@ -87,7 +88,7 @@ class Trainer:
 
             self.current_epoch += 1
         
-    def save_result(self, result: Dict[str, float]):
+    def save_result(self, result: Dict[str, float]) -> None:
         for key in result:
             if key not in self.monitor_series:
                 self.monitor_series[key] = M.MonitorSeries(key, self.monitor, interval=1)
