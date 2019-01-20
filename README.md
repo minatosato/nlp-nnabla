@@ -1,17 +1,16 @@
 # Deep learning implementation for NLP with NNabla
 Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
-## Test environment
+## Tested environment
 - Python 3.7.2
 - NNabla v1.0.10
 
 ## Models
 
-### Language models
+### Language models / word embedding
 - A vanilla recurrent neural network language model ([`language-models/rnnlm/`](https://github.com/satopirka/nlp-nnabla/tree/master/language-models/rnnlm))
 - LSTM language model ([`language-models/lstmlm/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/lstmlm))
 - Character-level neural language model ([`language-models/char-cnn-lstmlm/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/char-cnn-lstmlm))
-  - this is almost same implementation of the paper ["Character-Aware Neural Language Models"](https://arxiv.org/abs/1508.06615).
 - Continuous Bag-of-Words (CBOW) model ([`language-models/cbow/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/cbow)))
 - GloVe model ([`language-models/glove/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/glove)))
 

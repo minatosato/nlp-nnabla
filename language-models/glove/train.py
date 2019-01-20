@@ -17,8 +17,6 @@ import nnabla.parametric_functions as PF
 import nnabla.solvers as S
 from nnabla.utils.data_iterator import data_iterator_simple
 
-from tqdm import tqdm
-
 from common.parametric_functions import lstm
 from common.functions import time_distributed
 from common.functions import time_distributed_softmax_cross_entropy

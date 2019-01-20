@@ -1,17 +1,29 @@
 # GloVe: Global Vectors for Word Representation
+## Overview
 This is tiny implementation of the paper [GloVe: Global Vectors for Word Representation](https://www.aclweb.org/anthology/D14-1162).
 
-To start training, 
+## Start training
+This example demonstrates the training for PTB dataset.
 
 ```
-python glove.py -c cudnn
+python train.py
 ```
 
-After training, you can search the similar words for the query word.
+If you want to use cuDNN, execute as follows
+
+```
+python train.py -c cudnn
+```
 
 <img src="https://raw.githubusercontent.com/satopirka/nlp-nnabla/feature/embedding/language-models/glove/log/loss.png" style="width: 400px;">
 
+
+## Note
+After training, you can search the similar words for the query word.
+
 ```
+pip install -r requirements.txt
+
 python predict.py monday
 query = monday
 friday: 0.6632016897201538

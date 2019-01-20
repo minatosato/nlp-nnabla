@@ -1,15 +1,26 @@
 # Countinuous Bag-of-Words model (CBOW)
 ## Overview
 This is implementation of CBOW model.
-## Usage
+
+## Start training
+This example demonstrates the training for PTB dataset.
 
 ```
-$ python cbow.py -c cudnn
+python train.py
 ```
 
+If you want to use cuDNN, execute as follows
+
+```
+python train.py -c cudnn
+```
+
+## Note
 After training, you can search the similar words for the query word.
 
 ```
+$ pip install -r requirements.txt
+
 $ python predict.py five
 query = five
 two: 0.47092053294181824
