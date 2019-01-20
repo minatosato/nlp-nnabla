@@ -1,6 +1,7 @@
-## Countinuous Bag-of-Words model (CBOW)
-
-### Usage
+# Countinuous Bag-of-Words model (CBOW)
+## Overview
+This is implementation of CBOW model.
+## Usage
 
 ```
 $ python cbow.py -c cudnn

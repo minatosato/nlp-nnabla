@@ -9,7 +9,6 @@
 import numpy as np
 
 from typing import List
-from typing import Tuple
 from typing import Dict
 
 def wordseq2charseq(data: np.ndarray, i2w: Dict[int, str], c2i: Dict[str, int], i2c: Dict[int, str], word_length: int = 20) -> np.ndarray:
