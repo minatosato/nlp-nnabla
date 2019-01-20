@@ -39,6 +39,11 @@ class Trainer:
     current_epoch: int = 0
 
     def __post_init__(self) -> None:
+        self._init_metrics()
+        self.monitor: M.Monitor = M.Monitor(self.save_path)
+        self.monitor_series: Dict[str, M.MonitorSeries] = dict()
+
+    def _init_metrics(self):
         if len(self.metrics) == 0:
             self.metrics['loss'] = self.loss
         else:
@@ -50,16 +55,13 @@ class Trainer:
                     ret[key] = value
             self.metrics = ret
         
-        self.monitor: M.Monitor = M.Monitor(self.save_path)
-        self.monitor_series: Dict[str, M.MonitorSeries] = dict()
-    
     def update_variables(self, inputs: List[nn.Variable], loss: nn.Variable,
                          metrics: Dict[str, nn.Variable] = {}) -> None:
         self.inputs: List[nn.Variable] = inputs
         self.loss: nn.Variable = loss
         self.metrics: Dict[str, nn.Variable] = metrics
 
-        self.__post_init__()
+        self._init_metrics()
     
     def run(self, train_iter: DataIterator, valid_iter: Optional[DataIterator] = None, epochs: int = 5, verbose=0) -> None:
         assert len(train_iter.variables) == len(self.inputs), \
@@ -88,11 +90,14 @@ class Trainer:
 
             self.current_epoch += 1
         
-    def save_result(self, result: Dict[str, float]) -> None:
+    def save_result(self, result: Dict[str, float], evaluate=False) -> None:
         for key in result:
             if key not in self.monitor_series:
                 self.monitor_series[key] = M.MonitorSeries(key, self.monitor, interval=1)
-            self.monitor_series[key].add(self.current_epoch+1, result[key])
+            if not evaluate:
+                self.monitor_series[key].add(self.current_epoch+1, result[key])
+            else:
+                self.monitor_series[key].add(self.current_epoch, result[key])
     
     def evaluate(self, valid_iter: DataIterator, verbose=0) -> None:
         assert len(valid_iter.variables) == len(self.inputs)
@@ -101,7 +106,9 @@ class Trainer:
         assert valid_iter.batch_size == batch_size
 
         num_valid_batch = valid_iter.size // batch_size
-        self._run_one_epoch(num_valid_batch, self.current_epoch-1, valid_iter, train=False, show_epoch=False)
+        epoch_result = self._run_one_epoch(num_valid_batch, self.current_epoch-1, valid_iter, train=False, show_epoch=False)
+        self.save_result(epoch_result, evaluate=True)
+        self.save_fig()
 
     def save_fig(self) -> None:
         for metric in self.metrics:
