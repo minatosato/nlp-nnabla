@@ -10,7 +10,7 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
 ### Language models / word embedding
 - A vanilla recurrent neural network language model ([`language-models/rnnlm/`](https://github.com/satopirka/nlp-nnabla/tree/master/language-models/rnnlm))
 - LSTM language model ([`language-models/lstmlm/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/lstmlm))
-- Character-level neural language model ([`language-models/char-cnn-lstmlm/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/char-cnn-lstmlm))
+- Character-level convolutional LSTM language model ([`language-models/char-cnn-lstmlm/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/char-cnn-lstmlm))
 - Continuous Bag-of-Words (CBOW) model ([`language-models/cbow/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/cbow)))
 - GloVe model ([`language-models/glove/`](https://github.com/satopirka/nlp-nnabla/blob/master/language-models/glove)))
 
