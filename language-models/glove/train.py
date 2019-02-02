@@ -15,6 +15,11 @@ import nnabla as nn
 import nnabla.functions as F
 import nnabla.parametric_functions as PF
 import nnabla.solvers as S
+import nnabla.monitor as M
+from nnabla.experimental.trainers import Trainer
+from nnabla.experimental.trainers import Updater
+from nnabla.experimental.trainers import Evaluator
+
 from nnabla.utils.data_iterator import data_iterator_simple
 
 from common.parametric_functions import lstm
@@ -25,8 +30,6 @@ from common.functions import expand_dims
 
 from common.utils import PTBDataset
 from common.utils import with_padding
-
-from common.trainer import Trainer
 
 from utils import to_glove_dataset
 
@@ -94,14 +97,43 @@ t = nn.Variable((batch_size, 1))
 zero = F.constant(0, shape=(batch_size, 1))
 one = F.constant(1, shape=(batch_size, 1))
 weight = F.clip_by_value(t / 100, zero, one) ** 0.75
-loss = F.sum(weight * ((prediction - F.log(t+1)) ** 2))
+loss = F.sum(weight * ((prediction - F.log(t)) ** 2))
 
-# # Create solver.
+# Create solver.
 solver = S.Adam()
 solver.set_parameters(nn.get_parameters())
 
-trainer = Trainer(inputs=[x_central, x_context, t], loss=loss, metrics=dict(loss=loss), solver=solver)
-trainer.run(train_data_iter, valid_data_iter, epochs=max_epoch)
+# Create monitor
+monitor = M.Monitor('./log')
+monitor_loss = M.MonitorSeries("Training loss", monitor, interval=1000)
+monitor_valid_loss = M.MonitorSeries("Validation loss", monitor, interval=1)
+monitor_time = M.MonitorTimeElapsed("Training time", monitor, interval=1000)
+
+
+# Create updater
+def train_data_feeder():
+    x_central.d, x_context.d, t.d = train_data_iter.next()
+def update_callback_on_finish(i):
+    monitor_loss.add(i, loss.d)
+    monitor_time.add(i)
+updater = Updater(solver=solver,
+                  loss=loss,
+                  data_feeder=train_data_feeder,
+                  update_callback_on_finish=update_callback_on_finish)
+
+# Evaluator
+def valid_data_feeder():
+    x_central.d, x_context.d, t.d = valid_data_iter.next()
+def eval_callback_on_finish(i, ve):
+    monitor_valid_loss.add(i, ve)
+evaluator = Evaluator(loss,
+                      data_feeder=valid_data_feeder,
+                      val_iter=valid_data_iter.size // batch_size,
+                      callback_on_finish=eval_callback_on_finish)
+
+trainer = Trainer(updater=updater, evaluator=evaluator, model_save_path='./log',
+                  max_epoch=3, iter_per_epoch=train_data_iter.size//batch_size)
+trainer.train()
 
 with open('vectors.txt', 'w') as f:
     f.write('{} {}\n'.format(vocab_size-1, embedding_size))

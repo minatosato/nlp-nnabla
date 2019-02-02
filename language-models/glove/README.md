@@ -15,9 +15,6 @@ If you want to use cuDNN, execute as follows
 python train.py -c cudnn
 ```
 
-<img src="https://raw.githubusercontent.com/satopirka/nlp-nnabla/feature/embedding/language-models/glove/log/loss.png" style="width: 400px;">
-
-
 ## Note
 After training, you can search the similar words for the query word.
 
