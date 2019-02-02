@@ -3,7 +3,7 @@ Tiny implementation of deep learning models for NLP with Sony's NNabla.
 
 ## Tested environment
 - Python 3.7.2
-- NNabla v1.0.10
+- NNabla v1.0.11
 
 ## Models
 
