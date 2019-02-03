@@ -52,7 +52,7 @@ if args.context == 'cudnn':
 
 
 embedding_size: int = 2
-batch_size: int = 4
+batch_size: int = 1
 max_epoch: int = 100
 negative_sample_size = 10
 
@@ -68,12 +68,18 @@ with download(file_url, open_file=True) as f:
 
 pdict = {w:i for i,w in enumerate(set(reduce(operator.add, pdata)))}
 
-vocab_size: int = len(pdata)
+vocab_size: int = len(pdict)
 num_train_batch = len(pdata)//batch_size
 
 def load_train_func(index):
     x, y = pdata[index]
-    return pdict[x], pdict[y], random.choices(range(len(pdict)), k=negative_sample_size)
+    negative_sample_prob = np.ones(len(pdict))
+    negative_sample_prob[pdict[x]] = 0.0
+    negative_sample_prob[pdict[y]] = 0.0
+    negative_sample_prob /= len(pdict) - 2
+    negative_sample_indices = np.random.choice(range(len(pdict)), negative_sample_size, 
+                                               replace=False, p=negative_sample_prob)
+    return pdict[x], pdict[y], negative_sample_indices
 
 train_data_iter = data_iterator_simple(load_train_func, len(pdata), batch_size, shuffle=True, with_file_cache=False)
 
@@ -88,7 +94,6 @@ def distance(u, v, eps=1e-5):
     alpha = F.maximum2(F.constant(eps, shape=uu.shape), 1.0 - uu)
     beta = F.maximum2(F.constant(eps, shape=vv.shape), 1.0 - vv)
 
-
     return F.acosh(1 + 2 * euclid_norm_pow2 / (alpha * beta))
 
 		# alpha, beta = max(self.eps,1-uu), max(self.eps,1-vv)
@@ -96,10 +101,16 @@ def distance(u, v, eps=1e-5):
 
 
 def projection(x: nn.NdArray, eps: float = 1e-5) -> nn.NdArray:
-    return F.clip_by_norm(x, clip_norm=1-eps, axis=1)
+    norm = F.pow_scalar(F.sum(x**2, axis=1), val=0.5)
+    return F.where(condition=F.greater_equal_scalar(norm, val=1.),
+                   x_true=F.clip_by_norm(x, clip_norm=1-eps, axis=1),
+                   x_false=x)
+
+    # return F.clip_by_norm(x, clip_norm=1-eps, axis=1)
 
 
-class RiemannianSgd(object):
+
+class RiemannianSgd(S.Solver):
     def __init__(self, lr=0.01, eps=1e-5):
         self.lr = lr
         self.eps = eps
@@ -109,16 +120,20 @@ class RiemannianSgd(object):
 
     def zero_grad(self):
         for key in self.params:
-            self.params[key].data.zero()
-    
+            self.params[key].grad.zero()
+
     def update(self):
         for key in self.params:
-            rescaled_gradient: nn.NdArray = self.params[key].grad * expand_dims((1. - F.sum(self.params[key].data**2, axis=1))**2 / 4., axis=-1)
+            rescaled_gradient: nn.NdArray = self.params[key].grad * (1. - F.sum(self.params[key].data**2, axis=1, keepdims=True))**2 / 4.
+            print(self.params[key].grad.data)
+            print(rescaled_gradient.data)
             self.params[key].data -= self.lr * rescaled_gradient
             self.params[key].data = projection(self.params[key].data, eps=self.eps)
 
 def loss_function(u, v, negative_samples):
-    return F.sum(F.log(F.exp(-distance(u, v)) / sum([F.exp(-distance(u, x)) for x in F.split(negative_samples, axis=2)])))
+    return F.sum(-F.log(F.exp(-distance(u, v)) / sum([F.exp(-distance(u, x)) for x in F.split(negative_samples, axis=2)])))
+
+    # loss = -tf.log(tf.exp(-self.dists(u,v))/tf.reduce_sum(tf.exp(-self.dists(u,negs))))
 
 
 
@@ -140,3 +155,16 @@ solver.set_parameters(nn.get_parameters())
 
 trainer = Trainer(inputs=[u, v, negative_samples], loss=loss, solver=solver)
 trainer.run(train_data_iter, None, epochs=max_epoch)
+
+import matplotlib.pyplot as plt
+fig = plt.figure(figsize=(10,10))
+ax = plt.gca()
+ax.cla()
+ax.set_xlim((-1.1,1.1)); ax.set_ylim((-1.1,1.1))
+ax.add_artist(plt.Circle((0,0),1.,color='black',fill=False))
+ax.grid()
+for w,i in pdict.items():
+    c0,c1 = nn.get_parameters()["embed/W"].d[i]
+    ax.plot(c0,c1,'o',color='y')
+    ax.text(c0+.01,c1+.01,w,color='b')
+fig.savefig('./output.png',dpi=fig.dpi)
