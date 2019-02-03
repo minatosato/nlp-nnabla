@@ -125,8 +125,11 @@ class RiemannianSgd(S.Solver):
     def update(self):
         for key in self.params:
             rescaled_gradient: nn.NdArray = self.params[key].grad * (1. - F.sum(self.params[key].data**2, axis=1, keepdims=True))**2 / 4.
-            print(self.params[key].grad.data)
-            print(rescaled_gradient.data)
+            # print(self.params[key].grad.data)
+            # print(rescaled_gradient.data)
+            if np.inf in self.params[key].grad.data:
+                print(self.params[key].grad.data)
+                exit()
             self.params[key].data -= self.lr * rescaled_gradient
             self.params[key].data = projection(self.params[key].data, eps=self.eps)
 
@@ -148,7 +151,7 @@ _neg = F.transpose(_neg, axes=(0, 2, 1))
 
 loss = loss_function(_u, _v, _neg)
 
-nn.get_parameters()["embed/W"].d = I.UniformInitializer([-0.001, 0.001])(shape=(vocab_size, embedding_size))
+nn.get_parameters()["embed/W"].d = I.UniformInitializer([-0.1, 0.1])(shape=(vocab_size, embedding_size))
 
 solver = RiemannianSgd(lr=0.01)
 solver.set_parameters(nn.get_parameters())
@@ -168,3 +171,12 @@ for w,i in pdict.items():
     ax.plot(c0,c1,'o',color='y')
     ax.text(c0+.01,c1+.01,w,color='b')
 fig.savefig('./output.png',dpi=fig.dpi)
+
+# In [2]: u.d
+# Out[2]: array([14.], dtype=float32)
+
+# In [3]: v.d
+# Out[3]: array([20.], dtype=float32)
+
+# In [4]: negative_samples.d
+# Out[4]: array([[17.,  7., 23.,  3., 15.,  9., 12.,  5.,  1.,  6.]], dtype=float32)
