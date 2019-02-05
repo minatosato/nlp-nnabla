@@ -53,7 +53,7 @@ if args.context == 'cudnn':
 
 embedding_size: int = 2
 batch_size: int = 1
-max_epoch: int = 100
+max_epoch: int = 50
 negative_sample_size = 10
 
 file_url = 'https://raw.githubusercontent.com/qiangsiwei/poincare_embedding/master/data/mammal_subtree.tsv'
@@ -96,19 +96,12 @@ def distance(u, v, eps=1e-5):
 
     return F.acosh(1 + 2 * euclid_norm_pow2 / (alpha * beta))
 
-		# alpha, beta = max(self.eps,1-uu), max(self.eps,1-vv)
-		# gamma = max(1.,1+2*(uu-2*uv+vv)/alpha/beta)
-
 
 def projection(x: nn.NdArray, eps: float = 1e-5) -> nn.NdArray:
     norm = F.pow_scalar(F.sum(x**2, axis=1), val=0.5)
     return F.where(condition=F.greater_equal_scalar(norm, val=1.),
                    x_true=F.clip_by_norm(x, clip_norm=1-eps, axis=1),
                    x_false=x)
-
-    # return F.clip_by_norm(x, clip_norm=1-eps, axis=1)
-
-
 
 class RiemannianSgd(S.Solver):
     def __init__(self, lr=0.01, eps=1e-5):
@@ -124,9 +117,7 @@ class RiemannianSgd(S.Solver):
 
     def update(self):
         for key in self.params:
-            rescaled_gradient: nn.NdArray = self.params[key].grad * (1. - F.sum(self.params[key].data**2, axis=1, keepdims=True))**2 / 4.
-            # print(self.params[key].grad.data)
-            # print(rescaled_gradient.data)
+            rescaled_gradient: nn.NdArray = self.params[key].grad * (1. - F.sum(self.params[key].data**2, axis=1, keepdims=True))**2 / 4. 
             if np.inf in self.params[key].grad.data:
                 print(self.params[key].grad.data)
                 exit()
@@ -136,7 +127,6 @@ class RiemannianSgd(S.Solver):
 def loss_function(u, v, negative_samples):
     return F.sum(-F.log(F.exp(-distance(u, v)) / sum([F.exp(-distance(u, x)) for x in F.split(negative_samples, axis=2)])))
 
-    # loss = -tf.log(tf.exp(-self.dists(u,v))/tf.reduce_sum(tf.exp(-self.dists(u,negs))))
 
 
 
@@ -151,13 +141,38 @@ _neg = F.transpose(_neg, axes=(0, 2, 1))
 
 loss = loss_function(_u, _v, _neg)
 
-nn.get_parameters()["embed/W"].d = I.UniformInitializer([-0.1, 0.1])(shape=(vocab_size, embedding_size))
+nn.get_parameters()["embed/W"].d = I.UniformInitializer([-0.01, 0.01])(shape=(vocab_size, embedding_size))
 
-solver = RiemannianSgd(lr=0.01)
+solver = RiemannianSgd(lr=0.1)
 solver.set_parameters(nn.get_parameters())
 
 trainer = Trainer(inputs=[u, v, negative_samples], loss=loss, solver=solver)
 trainer.run(train_data_iter, None, epochs=max_epoch)
+
+
+line_points=[['mustang.n.01', 'odd-toed_ungulate.n.01'],
+ ['elk.n.01', 'even-toed_ungulate.n.01'],
+ ['even-toed_ungulate.n.01', 'ungulate.n.01'],
+ ['squirrel.n.01', 'rodent.n.01'],
+ ['beagle.n.01', 'dog.n.01'],
+ ['dog.n.01', 'canine.n.02'],
+ ['liger.n.01', 'carnivore.n.01'],
+ ['bison.n.01', 'even-toed_ungulate.n.01'],
+ ['collie.n.01', 'dog.n.01'],
+ ['odd-toed_ungulate.n.01', 'ungulate.n.01'],
+ ['ungulate.n.01', 'mammal.n.01'],
+ ['german_shepherd.n.01', 'dog.n.01'],
+ ['border_collie.n.01', 'dog.n.01'],
+ ['cat.n.01', 'carnivore.n.01'],
+ ['antelope.n.01', 'even-toed_ungulate.n.01'],
+ ['domestic_cat.n.01', 'cat.n.01'],
+ ['tiger.n.02', 'carnivore.n.01'],
+ ['rhinoceros.n.01', 'odd-toed_ungulate.n.01'],
+ ['carnivore.n.01', 'mammal.n.01'],
+ ['canine.n.02', 'carnivore.n.01'],
+ ['tiger_cat.n.01', 'cat.n.01'],
+ ['lion.n.01', 'carnivore.n.01'],
+ ['rodent.n.01', 'mammal.n.01']]
 
 import matplotlib.pyplot as plt
 fig = plt.figure(figsize=(10,10))
@@ -170,13 +185,12 @@ for w,i in pdict.items():
     c0,c1 = nn.get_parameters()["embed/W"].d[i]
     ax.plot(c0,c1,'o',color='y')
     ax.text(c0+.01,c1+.01,w,color='b')
+for line in line_points:
+    a, b = line
+    a, b = pdict[a], pdict[b]
+    a, b = nn.get_parameters()["embed/W"].d[a], nn.get_parameters()["embed/W"].d[b]
+    a, b = np.array([a, b]).T
+    ax.plot(a, b, color='y')
 fig.savefig('./output.png',dpi=fig.dpi)
 
-# In [2]: u.d
-# Out[2]: array([14.], dtype=float32)
 
-# In [3]: v.d
-# Out[3]: array([20.], dtype=float32)
-
-# In [4]: negative_samples.d
-# Out[4]: array([[17.,  7., 23.,  3., 15.,  9., 12.,  5.,  1.,  6.]], dtype=float32)
